@@ -1,0 +1,892 @@
+{
+  "name": "7 - Régua de Comunicação",
+  "description": null,
+  "active": false,
+  "versionCounter": 128,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "643f1e72-1bee-44b1-9eb7-53fe44ef276d",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -9632,
+        -688
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9ba118b8-dee1-420f-b846-a822adebe8ee",
+      "name": "Buscar Réguas Pendentes",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -9408,
+        -688
+      ],
+      "parameters": {
+        "resource": "item",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "filter": "fields/ComercialStatus eq 'Kit de Boas-Vindas Enviado' or fields/ComercialStatus eq 'Aguardando Inclusao no Grupo' or fields/ComercialStatus eq 'Concluido'",
+        "returnAll": true,
+        "options": {
+          "fields": [
+            "fields"
+          ]
+        },
+        "simplify": false
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "bfa80506-cf1a-4200-8040-733a2cf80985",
+      "name": "Identificar Réguas Vencidas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -9184,
+        -688
+      ],
+      "parameters": {
+        "jsCode": "// Cabeçalho padrão das mensagens do Comercial e do Operacional:\n// Bolsão + cada cliente com nome, endereço, telefone e e-mail (coluna \"Cliente\" do Lists)\n// Coluna \"Cliente\" = só o nome; Telefone, Email, Rua e Numero ficam em colunas próprias (uma linha por cliente).\n// Itens antigos: \"Nome, Rua e número, e-mail, Tel: ...\" na própria coluna Cliente.\nconst linhasCliente = f => {\n  const col = v => String(v || '').split('\\n').map(s => s.trim());\n  const nomes = col(f.Cliente || f.Bolsao).filter(Boolean);\n  if (!(f.Telefone || f.Email || f.Rua || f.Numero)) return nomes;\n  return nomes.map((nome, i) => {\n    const partes = [nome.replace(/,/g, ' '), [col(f.Rua)[i], col(f.Numero)[i]].filter(Boolean).join(' ').replace(/,/g, ' '), col(f.Email)[i]].filter(Boolean);\n    if (col(f.Telefone)[i]) partes.push('Tel: ' + col(f.Telefone)[i]);\n    return partes.join(', ');\n  });\n};\nconst cabecalhoCliente = f => {\n  const linhas = linhasCliente(f);\n  const blocos = linhas.map(l => {\n    const partes = l.split(',').map(s => s.trim()).filter(Boolean);\n    const nome = (partes.shift() || '').split(' — ')[0].trim();\n    const email = (l.match(/[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+/) || [])[0];\n    const tel = (l.match(/Tel\\.?:\\s*([^,]+)/i) || [])[1];\n    const endereco = partes.filter(s => !s.includes('@') && !/^Tel\\.?:/i.test(s)).join(', ');\n    return `👤 *Cliente:* ${nome || 'Não informado'}\\n📍 *Endereço:* ${endereco || 'Não informado'}\\n📞 *Telefone:* ${tel ? tel.trim() : 'Não informado'}\\n📧 *E-mail:* ${email || 'Não informado'}`;\n  });\n  if (!blocos.length) blocos.push('👤 *Cliente:* Não informado\\n📍 *Endereço:* Não informado\\n📞 *Telefone:* Não informado\\n📧 *E-mail:* Não informado');\n  return `🏘️ *Bolsão:* ${f.Title || 'Não informado'}\\n\\n` + blocos.join('\\n\\n');\n};\n\n// Comparação de datas no fuso de São Paulo\nconst hoje = DateTime.now().setZone('America/Sao_Paulo').startOf('day');\nconst saida = [];\n\nfor (const item of $input.all()) {\n  const f = item.json.fields || {};\n\n  const verificar = (tipo, data, status) => {\n    if (!data || status === 'Enviado') return;\n    const venc = DateTime.fromISO(String(data), { zone: 'utc' }).setZone('America/Sao_Paulo').startOf('day');\n    if (!venc.isValid || venc > hoje) return;\n    saida.push({\n      json: {\n        itemId: item.json.id,\n        cliente: f.Title || 'Não informado',\n        cabecalho: cabecalhoCliente(f),\n        tipoRegua: tipo,\n        dataProgramada: data,\n        statusAtual: status || 'Aguardando'\n      }\n    });\n  };\n\n  verificar('30 Dias', f.Regua30Data, f.Reguade30Dias);\n  verificar('60 Dias', f.Regua60Data, f.Reguade60Dias);\n  verificar('1 Ano', f.Regua1AnoData, f.Reguade1Ano);\n}\n\nreturn saida;"
+      }
+    },
+    {
+      "id": "ef8db6a4-6745-4c46-bacf-081a32585fa3",
+      "name": "Tipo da Régua",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -8288,
+        -800
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Identificar Réguas Vencidas').item.json.tipoRegua }}",
+                    "rightValue": "30 Dias",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "debca2ff-6f18-4d48-bf75-daa889d3ac3c"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "30 Dias"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "ff03f438-fb42-477e-8224-d70df115ea62",
+                    "leftValue": "={{ $('Identificar Réguas Vencidas').item.json.tipoRegua }}",
+                    "rightValue": "60 Dias",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "60 Dias"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "e10236d6-9dbd-45c5-b1ea-196f0852c040",
+                    "leftValue": "={{ $('Identificar Réguas Vencidas').item.json.tipoRegua }}",
+                    "rightValue": "1 Ano",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "1 Ano"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2825c2cf-32ee-4fd8-9e51-ba810cb42a3d",
+      "name": "Enviar Régua Comercial - 60 Dias",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -7392,
+        -784
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendPoll",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  chatId: ($('Validar Número - Régua 60 Dias').item.json.chatId || $('Destinatários - Régua 60 Dias').item.json.chatId),\n  poll: {\n    name: (() => { const m = String(\"📣 *RÉGUA DE COMUNICAÇÃO – 60 DIAS*\\n\\n\" +\n      $('Identificar Réguas Vencidas').item.json.cabecalho +\n      \"\\n\\n📌 *Ação necessária:*\\n\" +\n      \"Enviar ao cliente o material previsto para 60 dias.\\n\\n\" +\n      \"Após realizar o envio, selecione uma opção abaixo.\"); const b = (m.match(/Bols\\u00e3o:\\*\\s*([^\\n]+)/) || [])[1]; const t = (m.split('\\n')[0] || '').trim(); const i = m.lastIndexOf('\\u{1F4CC}'); const a = (i >= 0 ? m.slice(i) : '').split('\\n\\nApós')[0].replace(/\\*/g, '').trim(); return (a || t).slice(0, 250); })(),\n    options: [\n      \"✅ Material de 60 dias enviado\",\n      \"⚠️ Pendente\"\n    ],\n    multipleAnswers: false\n  },\n  session: \"automacao_encerramento_and_adesao\"\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "9df8a410-a67d-4beb-98ef-5eee12808aed",
+      "name": "Enviar Régua Comercial - 30 Dias",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -7392,
+        -976
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendPoll",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  chatId: ($('Validar Número - Régua 30 Dias').item.json.chatId || $('Destinatários - Régua 30 Dias').item.json.chatId),\n  poll: {\n    name: (() => { const m = String(\"📣 *RÉGUA DE COMUNICAÇÃO – 30 DIAS*\\n\\n\" +\n      $('Identificar Réguas Vencidas').item.json.cabecalho +\n      \"\\n\\n📌 *Ação necessária:*\\n\" +\n      \"Enviar ao cliente o material previsto para 30 dias.\\n\\n\" +\n      \"Após realizar o envio, selecione uma opção abaixo.\"); const b = (m.match(/Bols\\u00e3o:\\*\\s*([^\\n]+)/) || [])[1]; const t = (m.split('\\n')[0] || '').trim(); const i = m.lastIndexOf('\\u{1F4CC}'); const a = (i >= 0 ? m.slice(i) : '').split('\\n\\nApós')[0].replace(/\\*/g, '').trim(); return (a || t).slice(0, 250); })(),\n    options: [\n      \"✅ Material de 30 dias enviado\",\n      \"⚠️ Pendente\"\n    ],\n    multipleAnswers: false\n  },\n  session: \"automacao_encerramento_and_adesao\"\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "44e44bb2-0a07-4599-9866-c6aeac256e9d",
+      "name": "Enviar Régua Comercial - 1 Ano",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -7392,
+        -592
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendPoll",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  chatId: ($('Validar Número - Régua 1 Ano').item.json.chatId || $('Destinatários - Régua 1 Ano').item.json.chatId),\n  poll: {\n    name: (() => { const m = String(\"📣 *RÉGUA DE COMUNICAÇÃO – 1 ANO*\\n\\n\" +\n      $('Identificar Réguas Vencidas').item.json.cabecalho +\n      \"\\n\\n📌 *Ação necessária:*\\n\" +\n      \"Enviar ao cliente o material previsto para 1 ano.\\n\\n\" +\n      \"Após realizar o envio, selecione uma opção abaixo.\"); const b = (m.match(/Bols\\u00e3o:\\*\\s*([^\\n]+)/) || [])[1]; const t = (m.split('\\n')[0] || '').trim(); const i = m.lastIndexOf('\\u{1F4CC}'); const a = (i >= 0 ? m.slice(i) : '').split('\\n\\nApós')[0].replace(/\\*/g, '').trim(); return (a || t).slice(0, 250); })(),\n    options: [\n      \"✅ Material de 1 ano enviado\",\n      \"⚠️ Pendente\"\n    ],\n    multipleAnswers: false\n  },\n  session: \"automacao_encerramento_and_adesao\"\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "fb35a9e0-9bd8-4c00-a075-64f790baf931",
+      "name": "Redis SET - Enquete 30 Dias",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -7168,
+        -976
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'inclusao:regua:poll:' + $json._data.Info.ID }}",
+        "value": "={{ JSON.stringify({   itemId: $('Identificar Réguas Vencidas').item.json.itemId,   cliente: $('Identificar Réguas Vencidas').item.json.cliente,   etapa: 'Regua 30 Dias' }) }}",
+        "expire": true,
+        "ttl": 7776000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "b4064184-3a12-4c81-ae85-ff640ac35732",
+      "name": "Redis SET - Enquete 60 Dias",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -7168,
+        -784
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'inclusao:regua:poll:' + $json._data.Info.ID }}",
+        "value": "={{ JSON.stringify({   itemId: $('Identificar Réguas Vencidas').item.json.itemId,   cliente: $('Identificar Réguas Vencidas').item.json.cliente,   etapa: 'Regua 60 Dias' }) }}",
+        "expire": true,
+        "ttl": 7776000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "43c8185a-d0a4-48db-8b9b-ac1ad88ae040",
+      "name": "Redis SET - Enquete 1 Ano",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -7168,
+        -592
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'inclusao:regua:poll:' + $json._data.Info.ID }}",
+        "value": "={{ JSON.stringify({   itemId: $('Identificar Réguas Vencidas').item.json.itemId,   cliente: $('Identificar Réguas Vencidas').item.json.cliente,   etapa: 'Regua 1 Ano' }) }}",
+        "expire": true,
+        "ttl": 7776000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "fe8647bc-39dc-44e6-9e19-49136c8e182a",
+      "name": "Redis GET - Já enviada esta semana?",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -8960,
+        -688
+      ],
+      "parameters": {
+        "operation": "get",
+        "propertyName": "jaEnviada",
+        "key": "={{ 'inclusao:regua:enviada:' + $('Identificar Réguas Vencidas').item.json.itemId + ':' + $('Identificar Réguas Vencidas').item.json.tipoRegua.replace(/\\s/g, '') }}",
+        "options": {}
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "ef34e38f-c68c-4274-99ec-c2efc9162ecc",
+      "name": "Enviar hoje?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -8736,
+        -688
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "55b435e5-0eb8-428d-9555-a6cca623f919",
+              "leftValue": "={{ $json.jaEnviada }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "3821f430-2a35-4c31-8b5f-86bd152df423",
+      "name": "Já lembrada - Aguardar",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -8512,
+        -592
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "fc946adf-7cc5-439f-be45-e3fbb664ee81",
+      "name": "Redis SET - Marcar envio",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -8512,
+        -784
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'inclusao:regua:enviada:' + $('Identificar Réguas Vencidas').item.json.itemId + ':' + $('Identificar Réguas Vencidas').item.json.tipoRegua.replace(/\\s/g, '') }}",
+        "value": "={{ $now.toISO() }}",
+        "expire": true,
+        "ttl": 604800
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "ffb4c342-50fb-493e-a481-10f1a0077df2",
+      "name": "Detalhes - Enviar Régua Comercial - 60 Dias",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -7616,
+        -784
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: ($('Validar Número - Régua 60 Dias').item.json.chatId || $('Destinatários - Régua 60 Dias').item.json.chatId),\n  text: (() => { const m = String(\"📣 *RÉGUA DE COMUNICAÇÃO – 60 DIAS*\\n\\n\" +\n      $('Identificar Réguas Vencidas').item.json.cabecalho +\n      \"\\n\\n📌 *Ação necessária:*\\n\" +\n      \"Enviar ao cliente o material previsto para 60 dias.\\n\\n\" +\n      \"Após realizar o envio, selecione uma opção abaixo.\"); const i = m.lastIndexOf('\\u{1F4CC}'); return (i >= 0 ? m.slice(0, i) : m).trim(); })()\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "9d48c804-25a8-4a2e-b3c0-2fb8f32afdc2",
+      "name": "Detalhes - Enviar Régua Comercial - 30 Dias",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -7616,
+        -976
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: ($('Validar Número - Régua 30 Dias').item.json.chatId || $('Destinatários - Régua 30 Dias').item.json.chatId),\n  text: (() => { const m = String(\"📣 *RÉGUA DE COMUNICAÇÃO – 30 DIAS*\\n\\n\" +\n      $('Identificar Réguas Vencidas').item.json.cabecalho +\n      \"\\n\\n📌 *Ação necessária:*\\n\" +\n      \"Enviar ao cliente o material previsto para 30 dias.\\n\\n\" +\n      \"Após realizar o envio, selecione uma opção abaixo.\"); const i = m.lastIndexOf('\\u{1F4CC}'); return (i >= 0 ? m.slice(0, i) : m).trim(); })()\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "e50d7209-c0a9-427c-8bc9-fddac40884ed",
+      "name": "Detalhes - Enviar Régua Comercial - 1 Ano",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -7616,
+        -592
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: ($('Validar Número - Régua 1 Ano').item.json.chatId || $('Destinatários - Régua 1 Ano').item.json.chatId),\n  text: (() => { const m = String(\"📣 *RÉGUA DE COMUNICAÇÃO – 1 ANO*\\n\\n\" +\n      $('Identificar Réguas Vencidas').item.json.cabecalho +\n      \"\\n\\n📌 *Ação necessária:*\\n\" +\n      \"Enviar ao cliente o material previsto para 1 ano.\\n\\n\" +\n      \"Após realizar o envio, selecione uma opção abaixo.\"); const i = m.lastIndexOf('\\u{1F4CC}'); return (i >= 0 ? m.slice(0, i) : m).trim(); })()\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a70f1db2-7c8a-4562-87dc-466c4bd6a908",
+      "name": "Destinatários - Régua 30 Dias",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8064,
+        -976
+      ],
+      "parameters": {
+        "jsCode": "// ===== Representante comercial do bolsão =====\n// O responsável de cada bolsão vem da coluna \"Responsável\" da lista \"Matriz Bolsões\" (SharePoint).\n// Aqui fica só o WhatsApp de cada responsável, pelo e-mail dele (formato 55 + DDD + número).\nconst REPRESENTANTES = {\n  'exemplo4@exemplo.com':  '5511999999999',   // Responsável A\n  'exemplo5@exemplo.com': '5511999999999',   // Responsável B\n};\n// Recebe sempre. Também é o único destino quando o bolsão não é encontrado na Matriz.\nconst SEMPRE = [\n  '5511999999999',          // Responsável pela automação\n];\n// EM TESTE: true = cada representante é trocado pelo número de teste abaixo.\n// Para colocar em produção, troque para false.\nconst MODO_TESTE = true;\nconst NUMEROS_TESTE = {\n  'exemplo4@exemplo.com':  '5511999999999',   // bolsões do Responsável A → Responsável pela automação\n  // 5511999999999 é o próprio WhatsApp da automação: mensagem para ele mesmo não chega\n  'exemplo5@exemplo.com': '5511999999999',   // bolsões da Ana → Responsável pela automação\n};\n\nconst norm = s => ' ' + String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()\n  .replace(/[^a-z0-9]+/g, ' ')\n  .replace(/\\b(rua|r|av|avenida|alameda|al|praca|travessa|estrada|bolsao)\\b/g, ' ')\n  .replace(/\\s+/g, ' ').trim() + ' ';\n\n// Procura o bolsão da inclusão na Matriz (ignora acentos, maiúsculas e \"Rua\", \"Av.\" etc.)\nconst acharBolsao = (textos, matriz) => {\n  for (const t of textos) {\n    const alvo = norm(t);\n    if (alvo.trim().length < 3) continue;\n    const achados = (matriz || []).filter(b => {\n      const n = norm(b.Title);\n      return n.trim().length >= 3 && (alvo.includes(n) || n.includes(alvo));\n    });\n    if (achados.length) return achados.sort((a, b) => norm(b.Title).length - norm(a.Title).length)[0];\n  }\n  return null;\n};\n\nconst representante = (textos, resposta) => {\n  const lista = resposta && Array.isArray(resposta.value) ? resposta.value : null;\n  const b = lista ? acharBolsao(textos, lista) : null;\n  const resp = (b && b.Respons_x00e1_vel) || {};\n  const email = String(resp.EMail || '').toLowerCase();\n  const tel = MODO_TESTE ? NUMEROS_TESTE[email] : REPRESENTANTES[email];\n  const anexos = (b && b.AttachmentFiles) || [];\n  const kit = anexos.find(a => /\\.pdf$/i.test(a.FileName)) || anexos[0] || null;\n  let aviso = '';\n  if (!lista) aviso = 'Não foi possível consultar a Matriz Bolsões. Mensagem enviada só para o responsável pela automação.';\n  else if (!b) aviso = 'Bolsão não encontrado na Matriz Bolsões. Mensagem enviada só para o responsável pela automação.';\n  else if (!tel) aviso = `Responsável \"${resp.Title || 'não preenchido'}\" do bolsão ${b.Title} sem WhatsApp cadastrado na automação.`;\n  if (MODO_TESTE && tel) aviso = `MODO TESTE – em produção esta mensagem iria para ${resp.Title} (${REPRESENTANTES[email] || 'sem número'}).`;\n  return {\n    bolsaoMatriz: b ? b.Title : null,\n    representante: tel ? (resp.Title || null) : null,\n    // em teste vai só para o número de teste do representante; em produção, representante + SEMPRE\n    numeros: MODO_TESTE ? (tel ? [tel] : SEMPRE) : (tel ? [tel] : []).concat(SEMPRE),\n    aviso,\n    kitNome: kit ? kit.FileName : null,\n    kitCaminho: kit ? kit.ServerRelativeUrl : null,\n  };\n};\n\nconst valido = n => String(n).replace(/\\D/g, '');\nconst lista = arr => [...new Set(arr.map(valido).filter(n => n.length >= 12 && n.length <= 13))].map(n => n + '@c.us');\n\n// Régua de Comunicação (30 Dias): vai para o representante do bolsão (Matriz Bolsões)\nconst saida = [];\n$input.all().forEach((item, i) => {\n  const orig = $('Identificar Réguas Vencidas').itemMatching(i).json;\n  const r = representante([orig.cliente], item.json);\n  lista(r.numeros).forEach(chatId => saida.push({ json: { ...orig, chatId }, pairedItem: { item: i } }));\n});\nreturn saida;\n"
+      }
+    },
+    {
+      "id": "2a76e075-40c9-4424-acf3-d8dafc198436",
+      "name": "Destinatários - Régua 60 Dias",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8064,
+        -784
+      ],
+      "parameters": {
+        "jsCode": "// ===== Representante comercial do bolsão =====\n// O responsável de cada bolsão vem da coluna \"Responsável\" da lista \"Matriz Bolsões\" (SharePoint).\n// Aqui fica só o WhatsApp de cada responsável, pelo e-mail dele (formato 55 + DDD + número).\nconst REPRESENTANTES = {\n  'exemplo4@exemplo.com':  '5511999999999',   // Responsável A\n  'exemplo5@exemplo.com': '5511999999999',   // Responsável B\n};\n// Recebe sempre. Também é o único destino quando o bolsão não é encontrado na Matriz.\nconst SEMPRE = [\n  '5511999999999',          // Responsável pela automação\n];\n// EM TESTE: true = cada representante é trocado pelo número de teste abaixo.\n// Para colocar em produção, troque para false.\nconst MODO_TESTE = true;\nconst NUMEROS_TESTE = {\n  'exemplo4@exemplo.com':  '5511999999999',   // bolsões do Responsável A → Responsável pela automação\n  // 5511999999999 é o próprio WhatsApp da automação: mensagem para ele mesmo não chega\n  'exemplo5@exemplo.com': '5511999999999',   // bolsões da Ana → Responsável pela automação\n};\n\nconst norm = s => ' ' + String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()\n  .replace(/[^a-z0-9]+/g, ' ')\n  .replace(/\\b(rua|r|av|avenida|alameda|al|praca|travessa|estrada|bolsao)\\b/g, ' ')\n  .replace(/\\s+/g, ' ').trim() + ' ';\n\n// Procura o bolsão da inclusão na Matriz (ignora acentos, maiúsculas e \"Rua\", \"Av.\" etc.)\nconst acharBolsao = (textos, matriz) => {\n  for (const t of textos) {\n    const alvo = norm(t);\n    if (alvo.trim().length < 3) continue;\n    const achados = (matriz || []).filter(b => {\n      const n = norm(b.Title);\n      return n.trim().length >= 3 && (alvo.includes(n) || n.includes(alvo));\n    });\n    if (achados.length) return achados.sort((a, b) => norm(b.Title).length - norm(a.Title).length)[0];\n  }\n  return null;\n};\n\nconst representante = (textos, resposta) => {\n  const lista = resposta && Array.isArray(resposta.value) ? resposta.value : null;\n  const b = lista ? acharBolsao(textos, lista) : null;\n  const resp = (b && b.Respons_x00e1_vel) || {};\n  const email = String(resp.EMail || '').toLowerCase();\n  const tel = MODO_TESTE ? NUMEROS_TESTE[email] : REPRESENTANTES[email];\n  const anexos = (b && b.AttachmentFiles) || [];\n  const kit = anexos.find(a => /\\.pdf$/i.test(a.FileName)) || anexos[0] || null;\n  let aviso = '';\n  if (!lista) aviso = 'Não foi possível consultar a Matriz Bolsões. Mensagem enviada só para o responsável pela automação.';\n  else if (!b) aviso = 'Bolsão não encontrado na Matriz Bolsões. Mensagem enviada só para o responsável pela automação.';\n  else if (!tel) aviso = `Responsável \"${resp.Title || 'não preenchido'}\" do bolsão ${b.Title} sem WhatsApp cadastrado na automação.`;\n  if (MODO_TESTE && tel) aviso = `MODO TESTE – em produção esta mensagem iria para ${resp.Title} (${REPRESENTANTES[email] || 'sem número'}).`;\n  return {\n    bolsaoMatriz: b ? b.Title : null,\n    representante: tel ? (resp.Title || null) : null,\n    // em teste vai só para o número de teste do representante; em produção, representante + SEMPRE\n    numeros: MODO_TESTE ? (tel ? [tel] : SEMPRE) : (tel ? [tel] : []).concat(SEMPRE),\n    aviso,\n    kitNome: kit ? kit.FileName : null,\n    kitCaminho: kit ? kit.ServerRelativeUrl : null,\n  };\n};\n\nconst valido = n => String(n).replace(/\\D/g, '');\nconst lista = arr => [...new Set(arr.map(valido).filter(n => n.length >= 12 && n.length <= 13))].map(n => n + '@c.us');\n\n// Régua de Comunicação (60 Dias): vai para o representante do bolsão (Matriz Bolsões)\nconst saida = [];\n$input.all().forEach((item, i) => {\n  const orig = $('Identificar Réguas Vencidas').itemMatching(i).json;\n  const r = representante([orig.cliente], item.json);\n  lista(r.numeros).forEach(chatId => saida.push({ json: { ...orig, chatId }, pairedItem: { item: i } }));\n});\nreturn saida;\n"
+      }
+    },
+    {
+      "id": "fb837aa6-55c0-4707-bfa5-74acb578c4cd",
+      "name": "Destinatários - Régua 1 Ano",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8064,
+        -592
+      ],
+      "parameters": {
+        "jsCode": "// ===== Representante comercial do bolsão =====\n// O responsável de cada bolsão vem da coluna \"Responsável\" da lista \"Matriz Bolsões\" (SharePoint).\n// Aqui fica só o WhatsApp de cada responsável, pelo e-mail dele (formato 55 + DDD + número).\nconst REPRESENTANTES = {\n  'exemplo4@exemplo.com':  '5511999999999',   // Responsável A\n  'exemplo5@exemplo.com': '5511999999999',   // Responsável B\n};\n// Recebe sempre. Também é o único destino quando o bolsão não é encontrado na Matriz.\nconst SEMPRE = [\n  '5511999999999',          // Responsável pela automação\n];\n// EM TESTE: true = cada representante é trocado pelo número de teste abaixo.\n// Para colocar em produção, troque para false.\nconst MODO_TESTE = true;\nconst NUMEROS_TESTE = {\n  'exemplo4@exemplo.com':  '5511999999999',   // bolsões do Responsável A → Responsável pela automação\n  // 5511999999999 é o próprio WhatsApp da automação: mensagem para ele mesmo não chega\n  'exemplo5@exemplo.com': '5511999999999',   // bolsões da Ana → Responsável pela automação\n};\n\nconst norm = s => ' ' + String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()\n  .replace(/[^a-z0-9]+/g, ' ')\n  .replace(/\\b(rua|r|av|avenida|alameda|al|praca|travessa|estrada|bolsao)\\b/g, ' ')\n  .replace(/\\s+/g, ' ').trim() + ' ';\n\n// Procura o bolsão da inclusão na Matriz (ignora acentos, maiúsculas e \"Rua\", \"Av.\" etc.)\nconst acharBolsao = (textos, matriz) => {\n  for (const t of textos) {\n    const alvo = norm(t);\n    if (alvo.trim().length < 3) continue;\n    const achados = (matriz || []).filter(b => {\n      const n = norm(b.Title);\n      return n.trim().length >= 3 && (alvo.includes(n) || n.includes(alvo));\n    });\n    if (achados.length) return achados.sort((a, b) => norm(b.Title).length - norm(a.Title).length)[0];\n  }\n  return null;\n};\n\nconst representante = (textos, resposta) => {\n  const lista = resposta && Array.isArray(resposta.value) ? resposta.value : null;\n  const b = lista ? acharBolsao(textos, lista) : null;\n  const resp = (b && b.Respons_x00e1_vel) || {};\n  const email = String(resp.EMail || '').toLowerCase();\n  const tel = MODO_TESTE ? NUMEROS_TESTE[email] : REPRESENTANTES[email];\n  const anexos = (b && b.AttachmentFiles) || [];\n  const kit = anexos.find(a => /\\.pdf$/i.test(a.FileName)) || anexos[0] || null;\n  let aviso = '';\n  if (!lista) aviso = 'Não foi possível consultar a Matriz Bolsões. Mensagem enviada só para o responsável pela automação.';\n  else if (!b) aviso = 'Bolsão não encontrado na Matriz Bolsões. Mensagem enviada só para o responsável pela automação.';\n  else if (!tel) aviso = `Responsável \"${resp.Title || 'não preenchido'}\" do bolsão ${b.Title} sem WhatsApp cadastrado na automação.`;\n  if (MODO_TESTE && tel) aviso = `MODO TESTE – em produção esta mensagem iria para ${resp.Title} (${REPRESENTANTES[email] || 'sem número'}).`;\n  return {\n    bolsaoMatriz: b ? b.Title : null,\n    representante: tel ? (resp.Title || null) : null,\n    // em teste vai só para o número de teste do representante; em produção, representante + SEMPRE\n    numeros: MODO_TESTE ? (tel ? [tel] : SEMPRE) : (tel ? [tel] : []).concat(SEMPRE),\n    aviso,\n    kitNome: kit ? kit.FileName : null,\n    kitCaminho: kit ? kit.ServerRelativeUrl : null,\n  };\n};\n\nconst valido = n => String(n).replace(/\\D/g, '');\nconst lista = arr => [...new Set(arr.map(valido).filter(n => n.length >= 12 && n.length <= 13))].map(n => n + '@c.us');\n\n// Régua de Comunicação (1 Ano): vai para o representante do bolsão (Matriz Bolsões)\nconst saida = [];\n$input.all().forEach((item, i) => {\n  const orig = $('Identificar Réguas Vencidas').itemMatching(i).json;\n  const r = representante([orig.cliente], item.json);\n  lista(r.numeros).forEach(chatId => saida.push({ json: { ...orig, chatId }, pairedItem: { item: i } }));\n});\nreturn saida;\n"
+      }
+    },
+    {
+      "id": "f9bea1a4-8b27-4392-bc10-a65c24224f52",
+      "name": "Validar Número - Régua 30 Dias",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        -7840,
+        -976
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:3000/api/contacts/check-exists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.chatId.replace('@c.us', '') }}"
+            },
+            {
+              "name": "session",
+              "value": "<<PREENCHER>>"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7b54d358-941d-4a73-9152-b80158618354",
+      "name": "Validar Número - Régua 60 Dias",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        -7840,
+        -784
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:3000/api/contacts/check-exists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.chatId.replace('@c.us', '') }}"
+            },
+            {
+              "name": "session",
+              "value": "<<PREENCHER>>"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "660f9604-3716-455d-ae91-78d66977f693",
+      "name": "Validar Número - Régua 1 Ano",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        -7840,
+        -592
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:3000/api/contacts/check-exists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.chatId.replace('@c.us', '') }}"
+            },
+            {
+              "name": "session",
+              "value": "<<PREENCHER>>"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "dc81b453-5457-4593-8086-ec68663b71ac",
+      "name": "Buscar Matriz Bolsões",
+      "notes": "Lista 'Matriz Bolsões' (Gestão Operacional): responsável e Kit de Boas-Vindas de cada bolsão.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        -8400,
+        -972
+      ],
+      "parameters": {
+        "url": "https://SEU-TENANT.sharepoint.com/sites/SEU-SITE/_api/web/lists(guid'<<PREENCHER>>')/items?$select=Id,Title,Respons_x00e1_vel/Title,Respons_x00e1_vel/EMail,AttachmentFiles&$expand=Respons_x00e1_vel,AttachmentFiles&$top=500",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftSharePointOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json;odata=nometadata"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "microsoftSharePointOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftSharePointOAuth2Api>>"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Buscar Réguas Pendentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Réguas Pendentes": {
+      "main": [
+        [
+          {
+            "node": "Identificar Réguas Vencidas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identificar Réguas Vencidas": {
+      "main": [
+        [
+          {
+            "node": "Redis GET - Já enviada esta semana?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tipo da Régua": {
+      "main": [
+        [
+          {
+            "node": "Destinatários - Régua 30 Dias",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Destinatários - Régua 60 Dias",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Destinatários - Régua 1 Ano",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Régua Comercial - 30 Dias": {
+      "main": [
+        [
+          {
+            "node": "Redis SET - Enquete 30 Dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Régua Comercial - 60 Dias": {
+      "main": [
+        [
+          {
+            "node": "Redis SET - Enquete 60 Dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Régua Comercial - 1 Ano": {
+      "main": [
+        [
+          {
+            "node": "Redis SET - Enquete 1 Ano",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis GET - Já enviada esta semana?": {
+      "main": [
+        [
+          {
+            "node": "Enviar hoje?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar hoje?": {
+      "main": [
+        [
+          {
+            "node": "Redis SET - Marcar envio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Já lembrada - Aguardar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis SET - Marcar envio": {
+      "main": [
+        [
+          {
+            "node": "Buscar Matriz Bolsões",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detalhes - Enviar Régua Comercial - 60 Dias": {
+      "main": [
+        [
+          {
+            "node": "Enviar Régua Comercial - 60 Dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detalhes - Enviar Régua Comercial - 30 Dias": {
+      "main": [
+        [
+          {
+            "node": "Enviar Régua Comercial - 30 Dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detalhes - Enviar Régua Comercial - 1 Ano": {
+      "main": [
+        [
+          {
+            "node": "Enviar Régua Comercial - 1 Ano",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Destinatários - Régua 30 Dias": {
+      "main": [
+        [
+          {
+            "node": "Validar Número - Régua 30 Dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Destinatários - Régua 60 Dias": {
+      "main": [
+        [
+          {
+            "node": "Validar Número - Régua 60 Dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Destinatários - Régua 1 Ano": {
+      "main": [
+        [
+          {
+            "node": "Validar Número - Régua 1 Ano",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Número - Régua 30 Dias": {
+      "main": [
+        [
+          {
+            "node": "Detalhes - Enviar Régua Comercial - 30 Dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Número - Régua 60 Dias": {
+      "main": [
+        [
+          {
+            "node": "Detalhes - Enviar Régua Comercial - 60 Dias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Número - Régua 1 Ano": {
+      "main": [
+        [
+          {
+            "node": "Detalhes - Enviar Régua Comercial - 1 Ano",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Matriz Bolsões": {
+      "main": [
+        [
+          {
+            "node": "Tipo da Régua",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

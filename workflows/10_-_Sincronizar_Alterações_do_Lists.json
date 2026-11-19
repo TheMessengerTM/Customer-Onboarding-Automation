@@ -1,0 +1,1373 @@
+{
+  "name": "10 - Sincronizar Alterações do Lists",
+  "description": null,
+  "active": false,
+  "versionCounter": 50,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "255d4a49-fa64-47b1-b176-9ef57e02e314",
+      "name": "A cada 10 segundos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        2368,
+        -528
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d083c9e8-fe93-46c6-a090-920ad0f9853f",
+      "name": "Buscar Inclusões em Andamento",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "alwaysOutputData": false,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        2592,
+        -432
+      ],
+      "parameters": {
+        "resource": "item",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "filter": "fields/StatusAutomacao eq 'Aguardando Financeiro e Cadastros' or fields/StatusAutomacao eq 'Aguardando Comercial e Operacional'",
+        "returnAll": true,
+        "options": {
+          "fields": [
+            "id",
+            "fields"
+          ]
+        },
+        "simplify": false
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "e2b59df2-f628-42bb-9a92-0a58e9b9e929",
+      "name": "Redis GET - Último status conhecido",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        2816,
+        -432
+      ],
+      "parameters": {
+        "operation": "get",
+        "propertyName": "snapshot",
+        "key": "={{ 'inclusao:sync:snap:' + $json.id }}",
+        "options": {}
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "aa9615f4-e129-410a-838b-aac3a7bc9a56",
+      "name": "Detectar Alterações Manuais",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3040,
+        -432
+      ],
+      "parameters": {
+        "jsCode": "// Compara o status atual de cada área no Lists com o último status conhecido (Redis)\n// e gera as ações para as etapas que avançaram.\n// Quem decide se a etapa ainda precisa ser executada é a checagem de enquete aberta (mais adiante),\n// então alterações feitas pela própria automação não disparam nada de novo.\nconst AREAS = {\n  fin: { campo: 'FinanceiroStatus', fase: 'Aguardando Financeiro e Cadastros',\n         niveis: { 'Aguardando Cadastro': 0, 'Cadastro Realizado': 1, 'Concluido': 1 } },   // Financeiro: só a etapa de cadastro (19/11/2026)\n  cad: { campo: 'CadastrosStatus', fase: 'Aguardando Financeiro e Cadastros',\n         niveis: { 'Aguardando Cadastros': 0, 'Concluido': 1 } },\n  com: { campo: 'ComercialStatus', fase: 'Aguardando Comercial e Operacional',\n         niveis: { 'Aguardando Comercial': 0, 'Kit de Boas-Vindas Enviado': 1, 'Aguardando Inclusao no Grupo': 1, 'Concluido': 2 } },\n  ope: { campo: 'OperacionalStatus', fase: 'Aguardando Comercial e Operacional',\n         niveis: { 'Aguardando Operacional': 0, 'Contato com Cliente Realizado': 1, 'Placa Instalada': 2, 'Concluido': 3 } }\n};\n\n// Nome padrão de cada nível (usado para desfazer alteração feita antes da hora)\nconst NOMES = {\n  com: ['Aguardando Comercial', 'Aguardando Inclusao no Grupo', 'Concluido'],\n  ope: ['Aguardando Operacional', 'Contato com Cliente Realizado', 'Placa Instalada', 'Concluido']\n};\n\n// O que cada etapa faria se tivesse sido confirmada pela enquete / pelo e-mail\nconst enquete = (path, prefixo, voto, etapa) => ({ tipo: 'enquete', path, prefixo, voto, etapa });\nconst PASSOS = {\n  fin: [null,\n    { tipo: 'financeiro', sufixo: 'cadastro' }],\n  cad: [null,\n    enquete('inclusao-cadastros', 'inclusao:cadastros:poll:', '✅ Cadastros concluídos', 'Cadastros')],\n  com: [null,\n    enquete('inclusao-comercial', 'inclusao:comercial:poll:', '✅ Kit de Boas-Vindas enviado', 'Kit Boas-Vindas Comercial'),\n    enquete('inclusao-comercial', 'inclusao:comercial:poll:', '✅ Inclusão no grupo realizada', 'Inclusao Grupo Comercial')],\n  ope: [null,\n    enquete('inclusao-operacional', 'inclusao:operacional:poll:', '✅ Contato realizado', 'Contato Cliente Operacional'),\n    enquete('inclusao-operacional', 'inclusao:operacional:poll:', '✅ Placa instalada', 'Instalacao Placa Operacional'),\n    enquete('inclusao-operacional', 'inclusao:operacional:poll:', '✅ Equipe orientada', 'Orientacao Equipe Operacional')]\n};\n\nconst saida = [];\n\n// O nó do Redis devolve só o \"snapshot\"; os dados do Lists vêm do nó de busca (mesma ordem)\nconst itensLists = $('Buscar Inclusões em Andamento').all();\nconst snapshots = $input.all();\n\nfor (let i = 0; i < itensLists.length; i++) {\n  const j = itensLists[i].json;\n  const f = j.fields || {};\n  const itemId = String(j.id ?? f.id ?? '');\n  if (!itemId) continue;\n\n  let snap = null;\n  const bruto = snapshots[i]?.json?.snapshot;\n  try { snap = bruto ? JSON.parse(bruto) : null; } catch (e) { snap = null; }\n\n  const novoSnap = { ...(snap || {}) };\n  const acoes = [];\n  const reverter = [];\n\n  for (const [a, cfg] of Object.entries(AREAS)) {\n    const agora = cfg.niveis[f[cfg.campo]];\n    if (agora === undefined) continue;             // status fora do padrão: ignora\n    // Item ainda não visto: todo item nasce com as 4 áreas em \"Aguardando\" (nível 0).\n    // Se já foi respondido pelo WhatsApp/e-mail, as checagens seguintes impedem a repetição.\n    const primeiraVez = snap?.[a] === undefined;\n    const antes = primeiraVez ? 0 : snap[a];\n\n    const acao = passo => {\n      const p = PASSOS[a][passo];\n      const prox = PASSOS[a][passo + 1];\n      if (p) acoes.push({ ...p, area: a, passo, primeiraVez, proximaEtapa: prox?.etapa || null, itemId, cliente: f.Title || 'Cliente' });\n    };\n\n    if (agora > antes && f.StatusAutomacao !== cfg.fase) {\n      // Comercial/Operacional alterado antes de ser liberado: desfaz e avisa\n      if (NOMES[a] && f.StatusAutomacao === 'Aguardando Financeiro e Cadastros') {\n        reverter.push({ area: a, campo: cfg.campo, valor: NOMES[a][antes], tentativa: f[cfg.campo] });\n        continue;                                     // mantém o status anterior registrado\n      }\n      novoSnap[a] = agora;\n      continue;\n    }\n\n    if (a === 'fin') {\n      // Financeiro: o próprio fluxo de e-mail não volta o status, então as etapas seguem em sequência nesta execução\n      if (agora > antes) for (let passo = antes + 1; passo <= agora; passo++) acao(passo);\n    } else {\n      // WhatsApp: cada etapa executada grava o próprio status no Lists (o status \"volta\" para a etapa feita).\n      // Guardamos o status que a pessoa escolheu (alvo) e executamos UMA etapa por vez,\n      // sempre a seguinte à que já está no Lists, até chegar no alvo. Se algo atrasar, a próxima verificação continua.\n      const chaveAlvo = a + '_alvo';\n      const alvoAnt = Number(snap?.[chaveAlvo] || 0);\n      let alvo = alvoAnt, progresso = null;\n      if (agora > antes && agora > alvoAnt) { progresso = antes; alvo = agora; }   // novo status escolhido\n      else if (alvoAnt > agora) { progresso = agora; }                             // ainda a caminho do alvo\n      if (progresso !== null && alvo > progresso) acao(progresso + 1);\n      if (alvo > 0) novoSnap[chaveAlvo] = alvo; else delete novoSnap[chaveAlvo];\n    }\n    novoSnap[a] = agora;\n  }\n\n  saida.push({\n    json: {\n      itemId,\n      cliente: f.Title || 'Cliente',\n      snapKey: 'inclusao:sync:snap:' + itemId,\n      novoSnap: JSON.stringify(novoSnap),\n      acoes,\n      reverter\n    }\n  });\n}\n\nreturn saida;\n"
+      }
+    },
+    {
+      "id": "47198f7d-bb89-45bf-bb07-24bea70d12c5",
+      "name": "Redis SET - Guardar status atual",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        3264,
+        -432
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $json.snapKey }}",
+        "value": "={{ $json.novoSnap }}",
+        "expire": true,
+        "ttl": 31536000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "2d9f27f3-efbd-4f7d-b9b2-60827f67b325",
+      "name": "Listar Ações",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3488,
+        -32
+      ],
+      "parameters": {
+        "jsCode": "// Uma ação por item, na ordem em que devem acontecer\n// ID único por execução: a trava de clique duplo dos fluxos de resposta usa esse ID,\n// então repetir o mesmo ID (ex.: testar o mesmo item de novo) fazia a etapa ser ignorada\nconst execucao = Date.now();\nconst acoes = [];\nfor (const item of $('Detectar Alterações Manuais').all()) {\n  for (const a of item.json.acoes || []) acoes.push({ ...a, pollId: `lists-${a.itemId}-${a.area}-${a.passo}-${execucao}` });\n}\n// Só espera o fluxo processar quando a próxima ação depende desta (mesma área do mesmo item)\nreturn acoes.map((a, i) => {\n  const prox = acoes[i + 1];\n  return { json: { ...a, aguardar: !!prox && prox.itemId === a.itemId && prox.area === a.area } };\n});"
+      }
+    },
+    {
+      "id": "2449fc59-54d7-45bd-95c8-c6b94d09da3f",
+      "name": "Loop nas Ações",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        3712,
+        -32
+      ],
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "id": "5ee50306-9718-4bbc-8b9f-110efcd977df",
+      "name": "Tipo de resposta",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        3936,
+        -480
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8b9c9043-a564-4448-9008-d6422b89f8c3",
+                    "leftValue": "={{ $('Loop nas Ações').item.json.tipo }}",
+                    "rightValue": "enquete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "WhatsApp"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ecb162f8-1a50-4f8b-b890-79d6799cd95f",
+                    "leftValue": "={{ $('Loop nas Ações').item.json.tipo }}",
+                    "rightValue": "financeiro",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Financeiro"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5cb3b739-0d45-49e0-b4f2-b641b6974ccf",
+      "name": "Redis SET - Registrar resposta do Lists",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        5280,
+        -720
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $('Loop nas Ações').item.json.prefixo + $('Loop nas Ações').item.json.pollId }}",
+        "value": "={{ JSON.stringify({ itemId: $('Loop nas Ações').item.json.itemId, cliente: $('Loop nas Ações').item.json.cliente, etapa: $('Loop nas Ações').item.json.etapa, origem: 'Lists' }) }}",
+        "expire": true,
+        "ttl": 7776000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "6924260b-afcf-47f0-8127-22ec4aef86d8",
+      "name": "Executar etapa (mesmo caminho da enquete)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        5504,
+        -720
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://localhost:5678/webhook/' + $('Loop nas Ações').item.json.path }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  event: 'poll.vote',\n  origem: 'lists',\n  payload: {\n    _data: { RawMessage: { pollUpdateMessage: { pollCreationMessageKey: { ID: $('Loop nas Ações').item.json.pollId } } } },\n    vote: { selectedOptions: [ $('Loop nas Ações').item.json.voto ] }\n  }\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "3504af81-1def-45de-8d5b-19fd9ad1f753",
+      "name": "Redis GET - Link do e-mail do Financeiro",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        4160,
+        -288
+      ],
+      "parameters": {
+        "operation": "get",
+        "propertyName": "link",
+        "key": "={{ 'inclusao:financeiro:resume:' + $('Loop nas Ações').item.json.itemId }}",
+        "options": {}
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "28a143a5-3246-4976-9217-6d00a562aecc",
+      "name": "Link encontrado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        4384,
+        -288
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2e4c3c88-749b-4b12-9061-9991519a2cc9",
+              "leftValue": "={{ !!$json.link }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "daf4a325-ef7d-4c34-80c7-acdd79036299",
+      "name": "Confirmar etapa do Financeiro",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        4608,
+        -384
+      ],
+      "parameters": {
+        "url": "={{ (() => { const l = JSON.parse($json.link); return l.path + '/' + $('Loop nas Ações').item.json.sufixo + '?' + (l.query ? l.query + '&' : '') + 'acao=confirmar'; })() }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "062f9cd6-2013-49d7-8c4e-e2d4e76c2cc2",
+      "name": "Aguardar o fluxo processar",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        5952,
+        -176
+      ],
+      "parameters": {
+        "amount": 10
+      }
+    },
+    {
+      "id": "baeecc60-0ab8-46af-b013-0540595f7b9b",
+      "name": "Etapa já processada",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4832,
+        -528
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "733bfcec-6000-424b-bdc8-433935dab281",
+      "name": "Redis KEYS - Enquetes abertas da área",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        4160,
+        -656
+      ],
+      "parameters": {
+        "operation": "keys",
+        "keyPattern": "={{ $('Loop nas Ações').item.json.prefixo + '*' }}"
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "a3b15653-f31a-4e3f-ada3-263e7fe0e387",
+      "name": "Localizar enquetes desta etapa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4384,
+        -656
+      ],
+      "parameters": {
+        "jsCode": "// Decide se a etapa ainda precisa ser executada, olhando as enquetes de WhatsApp abertas\nconst acao = $('Loop nas Ações').item.json;\nconst abertas = etapa => Object.entries($json || {})\n  .filter(([k, v]) => {\n    try { const d = JSON.parse(v); return String(d.itemId) === String(acao.itemId) && d.etapa === etapa; }\n    catch (e) { return false; }\n  })\n  .map(([k]) => k);\n\nconst daEtapa = abertas(acao.etapa);\nconst daProxima = acao.proximaEtapa ? abertas(acao.proximaEtapa) : [];\n\n// Executa só se a enquete desta etapa está aberta e a da próxima ainda não foi enviada.\n// Caso contrário a etapa já foi respondida pelo WhatsApp e não pode ser repetida.\nif (daEtapa.length === 0 || daProxima.length > 0) return [{ json: { pular: true } }];\n\n// Fecha as enquetes abertas desta etapa (original + lembretes) para um clique atrasado não repetir a etapa\nreturn daEtapa.map(chave => ({ json: { chave, pular: false } }));\n"
+      }
+    },
+    {
+      "id": "e3db23ca-a7d8-4976-90fb-3af8c13afb8d",
+      "name": "Etapa pendente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        4608,
+        -656
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "08aac2bc-db83-424e-a0e8-0ccc41c022ab",
+              "leftValue": "={{ $json.pular !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "9c0a8fe3-16a0-45f8-8971-5da054140e16",
+      "name": "Redis DEL - Fechar enquetes da etapa",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        4832,
+        -720
+      ],
+      "parameters": {
+        "operation": "delete",
+        "key": "={{ $json.chave }}"
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "aa7dd808-b9fb-4b32-8910-03edd7eccf89",
+      "name": "Seguir uma vez",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5056,
+        -720
+      ],
+      "parameters": {
+        "jsCode": "// Continua com um único item, independente de quantas enquetes foram fechadas\nreturn [{ json: {} }];"
+      }
+    },
+    {
+      "id": "daa9f5fd-0ce5-4a38-a07f-1c2ba71b2719",
+      "name": "Listar Alterações Fora da Hora",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3488,
+        -848
+      ],
+      "parameters": {
+        "jsCode": "// Uma atualização por campo alterado antes da área ser liberada\nconst AREA = { fin: 'Financeiro', cad: 'Cadastros', com: 'Comercial', ope: 'Operacional' };\nconst saida = [];\nfor (const item of $('Detectar Alterações Manuais').all()) {\n  for (const r of item.json.reverter || []) {\n    saida.push({ json: { id: item.json.itemId, [r.campo]: r.valor,\n      _aviso: { cliente: item.json.cliente, area: AREA[r.area], tentativa: r.tentativa, valor: r.valor } } });\n  }\n}\nreturn saida;\n"
+      }
+    },
+    {
+      "id": "090e5825-4cfe-4727-bf1e-db5b380e70f9",
+      "name": "Preparar Campo a Desfazer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3712,
+        -848
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Só o ID e o campo a desfazer (sem dados auxiliares)\nconst { _aviso, ...campos } = $json;\nreturn { json: campos };"
+      }
+    },
+    {
+      "id": "2abd04fe-66fa-422b-9c5c-e74a0050c867",
+      "name": "Desfazer Alteração no Lists",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        3936,
+        -848
+      ],
+      "parameters": {
+        "resource": "item",
+        "operation": "update",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "ID",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false,
+              "type": "string"
+            },
+            {
+              "id": "FinanceiroStatus",
+              "displayName": "Financeiro Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": false,
+              "readOnly": false,
+              "removed": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastro",
+                  "value": "Aguardando Cadastro"
+                },
+                {
+                  "name": "Cadastro Realizado",
+                  "value": "Cadastro Realizado"
+                },
+                {
+                  "name": "Formulario Enviado",
+                  "value": "Formulario Enviado"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ]
+            },
+            {
+              "id": "CadastrosStatus",
+              "displayName": "Cadastros Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": false,
+              "readOnly": false,
+              "removed": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastros",
+                  "value": "Aguardando Cadastros"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ]
+            },
+            {
+              "id": "ComercialStatus",
+              "displayName": "Comercial Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": false,
+              "readOnly": false,
+              "removed": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Comercial",
+                  "value": "Aguardando Comercial"
+                },
+                {
+                  "name": "Kit de Boas-Vindas Enviado",
+                  "value": "Kit de Boas-Vindas Enviado"
+                },
+                {
+                  "name": "Aguardando Inclusao no Grupo",
+                  "value": "Aguardando Inclusao no Grupo"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ]
+            },
+            {
+              "id": "OperacionalStatus",
+              "displayName": "Operacional Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": false,
+              "readOnly": false,
+              "removed": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Operacional",
+                  "value": "Aguardando Operacional"
+                },
+                {
+                  "name": "Contato com Cliente Realizado",
+                  "value": "Contato com Cliente Realizado"
+                },
+                {
+                  "name": "Placa Instalada",
+                  "value": "Placa Instalada"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ]
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "7f5e6c3a-64e3-4fdb-87ce-9adc397c1a05",
+      "name": "Avisar Alteração Desfeita",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        4160,
+        -848
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: \"<<PREENCHER>>\",\n  text: \"⚠️ *ALTERAÇÃO DESFEITA NO LISTS*\\n\\n\" +\n    \"🏢 *Cliente:* \" + $('Listar Alterações Fora da Hora').item.json._aviso.cliente +\n    \"\\n📂 *Área:* \" + $('Listar Alterações Fora da Hora').item.json._aviso.area +\n    \"\\n✏️ *Tentativa:* \" + $('Listar Alterações Fora da Hora').item.json._aviso.tentativa +\n    \"\\n\\n📌 Esta área ainda não foi liberada pelo fluxo. O status voltou para *\" + $('Listar Alterações Fora da Hora').item.json._aviso.valor + \"*. Altere novamente quando a etapa for liberada.\"\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a0721e26-b55c-41a3-8e6e-1a39a5a4398f",
+      "name": "Avisar Financeiro sem link",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        4832,
+        -144
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: \"<<PREENCHER>>\",\n  text: \"⚠️ *FINANCEIRO – ALTERAÇÃO NO LISTS NÃO APLICADA*\\n\\n\" +\n    \"🏢 *Cliente:* \" + $('Loop nas Ações').item.json.cliente +\n    \"\\n\\n📌 Esta inclusão começou antes da atualização que permite confirmar o Financeiro pelo Lists. \" +\n    \"Confirme pelo botão do e-mail do Financeiro e volte o status no Lists para a etapa em que o e-mail está.\"\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a7921c8e-ca7a-4fb8-b5f2-258fa11f8575",
+      "name": "Avisar sobre o link?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        4608,
+        -192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "83e29c5a-2f8b-4735-b4f6-da7efe858121",
+              "leftValue": "={{ $('Loop nas Ações').item.json.primeiraVez !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "c1bc50d0-0ced-47bc-938a-20ef644f30f0",
+      "name": "Próxima etapa depende desta?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        5728,
+        -416
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f37126b8-8767-41e7-8182-638bf1c3ac1f",
+              "leftValue": "={{ $('Loop nas Ações').item.json.aguardar === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "eacda7c7-e66a-401e-8b73-6962091850b0",
+      "name": "Buscar Inclusões com Régua Completa",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "alwaysOutputData": false,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        2592,
+        -624
+      ],
+      "parameters": {
+        "resource": "item",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "filter": "fields/StatusAutomacao eq 'Inclusão Concluída'",
+        "returnAll": true,
+        "options": {
+          "fields": [
+            "id",
+            "fields"
+          ]
+        },
+        "simplify": false
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "c7e72670-0f43-40d5-881e-2b46ea3f031a",
+      "name": "Preparar Conclusão da Régua",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2816,
+        -624
+      ],
+      "parameters": {
+        "jsCode": "// Inclusão concluída e as três réguas marcadas como Enviado (pelo WhatsApp ou direto no Lists)\nconst enviado = v => String(v ?? '').trim().toLowerCase() === 'enviado';\nreturn $input.all()\n  .filter(i => i.json.id)\n  .filter(i => { const f = i.json.fields || {}; return enviado(f.Reguade30Dias) && enviado(f.Reguade60Dias) && enviado(f.Reguade1Ano); })\n  .map(i => ({ json: { id: String(i.json.id), StatusAutomacao: 'Inclusão e Régua Concluídas' } }));"
+      }
+    },
+    {
+      "id": "79d5567e-7abc-466d-a1d3-42c45183577d",
+      "name": "Concluir Inclusão e Régua",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        3040,
+        -624
+      ],
+      "parameters": {
+        "resource": "item",
+        "operation": "update",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "ID",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false,
+              "type": "string"
+            },
+            {
+              "id": "FinanceiroStatus",
+              "displayName": "Financeiro Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": false,
+              "readOnly": false,
+              "removed": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastro",
+                  "value": "Aguardando Cadastro"
+                },
+                {
+                  "name": "Cadastro Realizado",
+                  "value": "Cadastro Realizado"
+                },
+                {
+                  "name": "Formulario Enviado",
+                  "value": "Formulario Enviado"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ]
+            },
+            {
+              "id": "CadastrosStatus",
+              "displayName": "Cadastros Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": false,
+              "readOnly": false,
+              "removed": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastros",
+                  "value": "Aguardando Cadastros"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ]
+            },
+            {
+              "id": "ComercialStatus",
+              "displayName": "Comercial Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": false,
+              "readOnly": false,
+              "removed": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Comercial",
+                  "value": "Aguardando Comercial"
+                },
+                {
+                  "name": "Kit de Boas-Vindas Enviado",
+                  "value": "Kit de Boas-Vindas Enviado"
+                },
+                {
+                  "name": "Aguardando Inclusao no Grupo",
+                  "value": "Aguardando Inclusao no Grupo"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ]
+            },
+            {
+              "id": "OperacionalStatus",
+              "displayName": "Operacional Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": false,
+              "readOnly": false,
+              "removed": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Operacional",
+                  "value": "Aguardando Operacional"
+                },
+                {
+                  "name": "Contato com Cliente Realizado",
+                  "value": "Contato com Cliente Realizado"
+                },
+                {
+                  "name": "Placa Instalada",
+                  "value": "Placa Instalada"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ]
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Buscar Inclusões em Andamento": {
+      "main": [
+        [
+          {
+            "node": "Redis GET - Último status conhecido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis GET - Último status conhecido": {
+      "main": [
+        [
+          {
+            "node": "Detectar Alterações Manuais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detectar Alterações Manuais": {
+      "main": [
+        [
+          {
+            "node": "Redis SET - Guardar status atual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis SET - Guardar status atual": {
+      "main": [
+        [
+          {
+            "node": "Listar Alterações Fora da Hora",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Listar Ações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar Ações": {
+      "main": [
+        [
+          {
+            "node": "Loop nas Ações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop nas Ações": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Tipo de resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Etapa já processada": {
+      "main": [
+        [
+          {
+            "node": "Loop nas Ações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tipo de resposta": {
+      "main": [
+        [
+          {
+            "node": "Redis KEYS - Enquetes abertas da área",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Redis GET - Link do e-mail do Financeiro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis SET - Registrar resposta do Lists": {
+      "main": [
+        [
+          {
+            "node": "Executar etapa (mesmo caminho da enquete)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar etapa (mesmo caminho da enquete)": {
+      "main": [
+        [
+          {
+            "node": "Próxima etapa depende desta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis GET - Link do e-mail do Financeiro": {
+      "main": [
+        [
+          {
+            "node": "Link encontrado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link encontrado?": {
+      "main": [
+        [
+          {
+            "node": "Confirmar etapa do Financeiro",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Avisar sobre o link?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmar etapa do Financeiro": {
+      "main": [
+        [
+          {
+            "node": "Próxima etapa depende desta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aguardar o fluxo processar": {
+      "main": [
+        [
+          {
+            "node": "Loop nas Ações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis KEYS - Enquetes abertas da área": {
+      "main": [
+        [
+          {
+            "node": "Localizar enquetes desta etapa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Localizar enquetes desta etapa": {
+      "main": [
+        [
+          {
+            "node": "Etapa pendente?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Etapa pendente?": {
+      "main": [
+        [
+          {
+            "node": "Redis DEL - Fechar enquetes da etapa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Etapa já processada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis DEL - Fechar enquetes da etapa": {
+      "main": [
+        [
+          {
+            "node": "Seguir uma vez",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seguir uma vez": {
+      "main": [
+        [
+          {
+            "node": "Redis SET - Registrar resposta do Lists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar Alterações Fora da Hora": {
+      "main": [
+        [
+          {
+            "node": "Preparar Campo a Desfazer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Campo a Desfazer": {
+      "main": [
+        [
+          {
+            "node": "Desfazer Alteração no Lists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Desfazer Alteração no Lists": {
+      "main": [
+        [
+          {
+            "node": "Avisar Alteração Desfeita",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar Financeiro sem link": {
+      "main": [
+        [
+          {
+            "node": "Loop nas Ações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar sobre o link?": {
+      "main": [
+        [
+          {
+            "node": "Avisar Financeiro sem link",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Etapa já processada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Próxima etapa depende desta?": {
+      "main": [
+        [
+          {
+            "node": "Aguardar o fluxo processar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop nas Ações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A cada 10 segundos": {
+      "main": [
+        [
+          {
+            "node": "Buscar Inclusões em Andamento",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Buscar Inclusões com Régua Completa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Inclusões com Régua Completa": {
+      "main": [
+        [
+          {
+            "node": "Preparar Conclusão da Régua",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Conclusão da Régua": {
+      "main": [
+        [
+          {
+            "node": "Concluir Inclusão e Régua",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "meta": null,
+  "tags": []
+}

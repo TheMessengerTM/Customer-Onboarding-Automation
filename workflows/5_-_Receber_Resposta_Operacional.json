@@ -1,0 +1,3837 @@
+{
+  "name": "5 - Receber Resposta Operacional",
+  "description": null,
+  "active": false,
+  "versionCounter": 35,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "c31122d1-2d9d-4e9e-983a-d70e15b4f4a9",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -17696,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inclusao-operacional",
+        "options": {}
+      }
+    },
+    {
+      "id": "0df0d6ac-9a56-4af4-bf6c-874b0649b0a3",
+      "name": "Redis GET - Operacional",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -17472,
+        0
+      ],
+      "parameters": {
+        "operation": "get",
+        "propertyName": "dadosOperacional",
+        "key": "={{ 'inclusao:operacional:poll:' + ($json.body?.payload?._data?.RawMessage?.pollUpdateMessage?.pollCreationMessageKey?.ID ?? 'sem-enquete') }}",
+        "options": {}
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "574a685c-e9cc-4502-b940-dc26a22942e4",
+      "name": "Resposta pertence ao Operacional?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -17248,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2dc07eb1-bb9f-4aaa-aaab-2d8d85f615c2",
+              "leftValue": "={{ $json.dadosOperacional }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fc0b574e-1b93-4077-8038-95a11e49e48c",
+      "name": "No Operation, do nothing",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -17024,
+        96
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "332b3d77-9d38-4f6c-b2cd-c2b6580ab1d4",
+      "name": "Organizar Resposta Operacional",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17024,
+        -96
+      ],
+      "parameters": {
+        "jsCode": "const dadosRedis = JSON.parse($json.dadosOperacional);\n\nconst webhook = $('Webhook').item.json;\n\nconst resposta =\n  webhook.body?.payload?.vote?.selectedOptions?.[0] ?? null;\n\nconst pollId =\n  webhook.body?.payload?._data?.RawMessage\n    ?.pollUpdateMessage\n    ?.pollCreationMessageKey\n    ?.ID ?? null;\n\nreturn [{\n  json: {\n    itemId: dadosRedis.itemId,\n    cliente: dadosRedis.cliente,\n    etapa: dadosRedis.etapa,\n    resposta,\n    pollId\n  }\n}];"
+      }
+    },
+    {
+      "id": "314d925b-e8ee-4943-8bfd-e32578d73ce7",
+      "name": "Resposta Operacional",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -15232,
+        -400
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Organizar Resposta Operacional').item.json.resposta }}",
+                    "rightValue": "✅ Contato realizado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "78b59872-e6ce-4506-a5b9-ad978c0215f8"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Contato realizado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "6190e726-8e84-404d-85ce-979577730c88",
+                    "leftValue": "={{ $('Organizar Resposta Operacional').item.json.resposta }}",
+                    "rightValue": "✅ Placa instalada",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Placa instalada"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "3c911a3c-c58f-484d-908a-07208f4a4689",
+                    "leftValue": "={{ $('Organizar Resposta Operacional').item.json.resposta }}",
+                    "rightValue": "✅ Equipe orientada",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Equipe orientada"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e1ab2dd5-ec57-4fd6-8161-8b3cfa0d6910",
+      "name": "Atualizar Operacional - Contato Cliente",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -15008,
+        -480
+      ],
+      "parameters": {
+        "resource": "item",
+        "operation": "update",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Organizar Resposta Operacional').item.json.itemId }}",
+            "OperacionalStatus": "Contato com Cliente Realizado"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Title",
+              "displayName": "Título",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "StatusAutomacao",
+              "displayName": "Status Automacao",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Financeiro e Cadastros",
+                  "value": "Aguardando Financeiro e Cadastros"
+                },
+                {
+                  "name": "Aguardando Comercial e Operacional",
+                  "value": "Aguardando Comercial e Operacional"
+                },
+                {
+                  "name": "Inclusão Concluída",
+                  "value": "Inclusão Concluída"
+                },
+                {
+                  "name": "Revisão Manual",
+                  "value": "Revisão Manual"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "PrazoImplantacaoDiasUteis",
+              "displayName": "PrazoImplantacaoDiasUteis",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioServicoMensal",
+              "displayName": "DataInicioServicoMensal",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroStatus",
+              "displayName": "Financeiro Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastro",
+                  "value": "Aguardando Cadastro"
+                },
+                {
+                  "name": "Cadastro Realizado",
+                  "value": "Cadastro Realizado"
+                },
+                {
+                  "name": "Formulario Enviado",
+                  "value": "Formulario Enviado"
+                },
+                {
+                  "name": "Aguardando Formulario",
+                  "value": "Aguardando Formulario"
+                },
+                {
+                  "name": "Formulario Recebido",
+                  "value": "Formulario Recebido"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "CadastrosStatus",
+              "displayName": "Cadastros Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastros",
+                  "value": "Aguardando Cadastros"
+                },
+                {
+                  "name": "Em Andamento",
+                  "value": "Em Andamento"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ComercialStatus",
+              "displayName": "Comercial Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Comercial",
+                  "value": "Aguardando Comercial"
+                },
+                {
+                  "name": "Kit de Boas-Vindas Enviado",
+                  "value": "Kit de Boas-Vindas Enviado"
+                },
+                {
+                  "name": "Aguardando Inclusao no Grupo",
+                  "value": "Aguardando Inclusao no Grupo"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "OperacionalStatus",
+              "displayName": "Operacional Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Operacional",
+                  "value": "Aguardando Operacional"
+                },
+                {
+                  "name": "Contato com Cliente Realizado",
+                  "value": "Contato com Cliente Realizado"
+                },
+                {
+                  "name": "Placa Instalada",
+                  "value": "Placa Instalada"
+                },
+                {
+                  "name": "Confirmacao de Instalacao Enviada",
+                  "value": "Confirmacao de Instalacao Enviada"
+                },
+                {
+                  "name": "Equipe Orientada",
+                  "value": "Equipe Orientada"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": false
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Observacao",
+              "displayName": "Observacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DocumentoAssinado",
+              "displayName": "DocumentoAssinado",
+              "canBeUsedToMatch": false,
+              "type": "boolean",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "PrazoImplantacaoDiasUteis0",
+              "displayName": "PrazoImplantacaoDiasUteis",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "NumeroProposta",
+              "displayName": "NumeroProposta",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ObjetoContrato",
+              "displayName": "ObjetoContrato",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "VigenciaMinimaMeses",
+              "displayName": "VigenciaMinimaMeses",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "AvisoPrevioDias",
+              "displayName": "AvisoPrevioDias",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TipoMovimento",
+              "displayName": "TipoMovimento",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Inclusão em Cliente Existente",
+                  "value": "Inclusão em Cliente Existente"
+                },
+                {
+                  "name": "Reajuste e Prorrogação",
+                  "value": "Reajuste e Prorrogação"
+                },
+                {
+                  "name": "Novo Cliente",
+                  "value": "Novo Cliente"
+                },
+                {
+                  "name": "Prorrogação",
+                  "value": "Prorrogação"
+                },
+                {
+                  "name": "Reajuste",
+                  "value": "Reajuste"
+                },
+                {
+                  "name": "Exclusão",
+                  "value": "Exclusão"
+                },
+                {
+                  "name": "Outro",
+                  "value": "Outro"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioContrato",
+              "displayName": "DataInicioContrato",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "IDContraktor",
+              "displayName": "IDContraktor",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioCobrancaMensal",
+              "displayName": "DataInicioCobrancaMensal",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataFimContrato",
+              "displayName": "DataFimContrato",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Contratantes",
+              "displayName": "Contratantes",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "LocaisInstalacao",
+              "displayName": "LocaisInstalacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ServicosContratados",
+              "displayName": "ServicosContratados",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TituloDocumento",
+              "displayName": "TituloDocumento",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroObservacao",
+              "displayName": "FinanceiroObservacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroDataConclusao",
+              "displayName": "FinanceiroDataConclusao",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataAssinatura",
+              "displayName": "Data Assinatura",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "HoraAssinatura",
+              "displayName": "HoraAssinatura",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "EmpresaAster",
+              "displayName": "EmpresaAster",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "CNPJAster",
+              "displayName": "CNPJAster",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TipoDocumento",
+              "displayName": "TipoDocumento",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua30Data",
+              "displayName": "Regua30Data",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade30Dias",
+              "displayName": "Regua de 30 Dias",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua60Data",
+              "displayName": "Regua60Data",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade60Dias",
+              "displayName": "Regua de 60 Dias",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua1AnoData",
+              "displayName": "Regua1AnoData",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade1Ano",
+              "displayName": "Regua de 1 Ano",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "OperacionalPendenciaEtapa",
+              "displayName": "OperacionalPendenciaEtapa",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "id": "id",
+              "displayName": "ID",
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": true,
+              "required": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "a016b403-cf8d-450c-8271-3cd3ecf4b3c5",
+      "name": "Redis SET - Operacional Instalação Placa",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -13440,
+        -480
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'inclusao:operacional:poll:' + $('Enviar Enquete Operacional - Instalação da Placa').item.json._data.Info.ID }}",
+        "value": "={{ JSON.stringify({   itemId: $('Organizar Resposta Operacional').item.json.itemId,   cliente: $('Organizar Resposta Operacional').item.json.cliente,   etapa: 'Instalacao Placa Operacional' }) }}",
+        "expire": true,
+        "ttl": 7776000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "53eba4ca-9a96-47ea-b8fc-92ccaf3b5ab9",
+      "name": "Enviar Enquete Operacional - Instalação da Placa",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -13664,
+        -480
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendPoll",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  chatId: ($('Validar Número - Operacional (Placa)').item.json.chatId || $('Destinatários - Operacional (Placa)').item.json.chatId),\n  poll: {\n    name: (() => { const m = String($('Preparar Mensagem (Placa)').item.json.mensagem); const b = (m.match(/Bols\\u00e3o:\\*\\s*([^\\n]+)/) || [])[1]; const t = (m.split('\\n')[0] || '').trim(); const i = m.lastIndexOf('\\u{1F4CC}'); const a = (i >= 0 ? m.slice(i) : '').split('\\n\\nApós')[0].replace(/\\*/g, '').trim(); return (a || t).slice(0, 250); })(),\n    options: [\n      \"✅ Placa instalada\",\n      \"⚠️ Pendente\"\n    ],\n    multipleAnswers: false\n  },\n  session: \"automacao_encerramento_and_adesao\"\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "9aa8c0e0-ee36-4129-ba5a-5ad9633a6265",
+      "name": "Atualizar Operacional - Placa Instalada",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -15008,
+        -288
+      ],
+      "parameters": {
+        "resource": "item",
+        "operation": "update",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Organizar Resposta Operacional').item.json.itemId }}",
+            "OperacionalStatus": "Placa Instalada"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Title",
+              "displayName": "Título",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "StatusAutomacao",
+              "displayName": "Status Automacao",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Financeiro e Cadastros",
+                  "value": "Aguardando Financeiro e Cadastros"
+                },
+                {
+                  "name": "Aguardando Comercial e Operacional",
+                  "value": "Aguardando Comercial e Operacional"
+                },
+                {
+                  "name": "Inclusão Concluída",
+                  "value": "Inclusão Concluída"
+                },
+                {
+                  "name": "Revisão Manual",
+                  "value": "Revisão Manual"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "PrazoImplantacaoDiasUteis",
+              "displayName": "PrazoImplantacaoDiasUteis",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioServicoMensal",
+              "displayName": "DataInicioServicoMensal",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroStatus",
+              "displayName": "Financeiro Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastro",
+                  "value": "Aguardando Cadastro"
+                },
+                {
+                  "name": "Cadastro Realizado",
+                  "value": "Cadastro Realizado"
+                },
+                {
+                  "name": "Formulario Enviado",
+                  "value": "Formulario Enviado"
+                },
+                {
+                  "name": "Aguardando Formulario",
+                  "value": "Aguardando Formulario"
+                },
+                {
+                  "name": "Formulario Recebido",
+                  "value": "Formulario Recebido"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "CadastrosStatus",
+              "displayName": "Cadastros Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastros",
+                  "value": "Aguardando Cadastros"
+                },
+                {
+                  "name": "Em Andamento",
+                  "value": "Em Andamento"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ComercialStatus",
+              "displayName": "Comercial Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Comercial",
+                  "value": "Aguardando Comercial"
+                },
+                {
+                  "name": "Kit de Boas-Vindas Enviado",
+                  "value": "Kit de Boas-Vindas Enviado"
+                },
+                {
+                  "name": "Aguardando Inclusao no Grupo",
+                  "value": "Aguardando Inclusao no Grupo"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "OperacionalStatus",
+              "displayName": "Operacional Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Operacional",
+                  "value": "Aguardando Operacional"
+                },
+                {
+                  "name": "Contato com Cliente Realizado",
+                  "value": "Contato com Cliente Realizado"
+                },
+                {
+                  "name": "Placa Instalada",
+                  "value": "Placa Instalada"
+                },
+                {
+                  "name": "Confirmacao de Instalacao Enviada",
+                  "value": "Confirmacao de Instalacao Enviada"
+                },
+                {
+                  "name": "Equipe Orientada",
+                  "value": "Equipe Orientada"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": false
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Observacao",
+              "displayName": "Observacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DocumentoAssinado",
+              "displayName": "DocumentoAssinado",
+              "canBeUsedToMatch": false,
+              "type": "boolean",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "PrazoImplantacaoDiasUteis0",
+              "displayName": "PrazoImplantacaoDiasUteis",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "NumeroProposta",
+              "displayName": "NumeroProposta",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ObjetoContrato",
+              "displayName": "ObjetoContrato",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "VigenciaMinimaMeses",
+              "displayName": "VigenciaMinimaMeses",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "AvisoPrevioDias",
+              "displayName": "AvisoPrevioDias",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TipoMovimento",
+              "displayName": "TipoMovimento",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Inclusão em Cliente Existente",
+                  "value": "Inclusão em Cliente Existente"
+                },
+                {
+                  "name": "Reajuste e Prorrogação",
+                  "value": "Reajuste e Prorrogação"
+                },
+                {
+                  "name": "Novo Cliente",
+                  "value": "Novo Cliente"
+                },
+                {
+                  "name": "Prorrogação",
+                  "value": "Prorrogação"
+                },
+                {
+                  "name": "Reajuste",
+                  "value": "Reajuste"
+                },
+                {
+                  "name": "Exclusão",
+                  "value": "Exclusão"
+                },
+                {
+                  "name": "Outro",
+                  "value": "Outro"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioContrato",
+              "displayName": "DataInicioContrato",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "IDContraktor",
+              "displayName": "IDContraktor",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioCobrancaMensal",
+              "displayName": "DataInicioCobrancaMensal",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataFimContrato",
+              "displayName": "DataFimContrato",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Contratantes",
+              "displayName": "Contratantes",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "LocaisInstalacao",
+              "displayName": "LocaisInstalacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ServicosContratados",
+              "displayName": "ServicosContratados",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TituloDocumento",
+              "displayName": "TituloDocumento",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroObservacao",
+              "displayName": "FinanceiroObservacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroDataConclusao",
+              "displayName": "FinanceiroDataConclusao",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataAssinatura",
+              "displayName": "Data Assinatura",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "HoraAssinatura",
+              "displayName": "HoraAssinatura",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "EmpresaAster",
+              "displayName": "EmpresaAster",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "CNPJAster",
+              "displayName": "CNPJAster",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TipoDocumento",
+              "displayName": "TipoDocumento",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua30Data",
+              "displayName": "Regua30Data",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade30Dias",
+              "displayName": "Regua de 30 Dias",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua60Data",
+              "displayName": "Regua60Data",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade60Dias",
+              "displayName": "Regua de 60 Dias",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua1AnoData",
+              "displayName": "Regua1AnoData",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade1Ano",
+              "displayName": "Regua de 1 Ano",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "OperacionalPendenciaEtapa",
+              "displayName": "OperacionalPendenciaEtapa",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "id": "id",
+              "displayName": "ID",
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": true,
+              "required": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "3845f0cc-4870-4907-8ace-4b6c2eb9a80d",
+      "name": "Enviar Enquete Operacional - Orientação da Equipe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -13664,
+        -288
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendPoll",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  chatId: ($('Validar Número - Operacional (Equipe)').item.json.chatId || $('Destinatários - Operacional (Equipe)').item.json.chatId),\n  poll: {\n    name: (() => { const m = String($('Preparar Mensagem (Equipe)').item.json.mensagem); const b = (m.match(/Bols\\u00e3o:\\*\\s*([^\\n]+)/) || [])[1]; const t = (m.split('\\n')[0] || '').trim(); const i = m.lastIndexOf('\\u{1F4CC}'); const a = (i >= 0 ? m.slice(i) : '').split('\\n\\nApós')[0].replace(/\\*/g, '').trim(); return (a || t).slice(0, 250); })(),\n    options: [\n      \"✅ Equipe orientada\",\n      \"⚠️ Pendente\"\n    ],\n    multipleAnswers: false\n  },\n  session: \"automacao_encerramento_and_adesao\"\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "fc7a0a4e-9042-4ec6-8629-b2057901e72e",
+      "name": "Redis SET - Operacional Equipe Orientada",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -13440,
+        -288
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'inclusao:operacional:poll:' + $('Enviar Enquete Operacional - Orientação da Equipe').item.json._data.Info.ID }}",
+        "value": "={{ JSON.stringify({   itemId: $('Organizar Resposta Operacional').item.json.itemId,   cliente: $('Organizar Resposta Operacional').item.json.cliente,   etapa: 'Orientacao Equipe Operacional' }) }}",
+        "expire": true,
+        "ttl": 7776000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "a16ae247-7d52-493d-9f88-e9f462def15a",
+      "name": "Concluir Operacional",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -15008,
+        0
+      ],
+      "parameters": {
+        "resource": "item",
+        "operation": "update",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Organizar Resposta Operacional').item.json.itemId }}",
+            "OperacionalStatus": "Concluido"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Title",
+              "displayName": "Título",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "StatusAutomacao",
+              "displayName": "Status Automacao",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Financeiro e Cadastros",
+                  "value": "Aguardando Financeiro e Cadastros"
+                },
+                {
+                  "name": "Aguardando Comercial e Operacional",
+                  "value": "Aguardando Comercial e Operacional"
+                },
+                {
+                  "name": "Inclusão Concluída",
+                  "value": "Inclusão Concluída"
+                },
+                {
+                  "name": "Revisão Manual",
+                  "value": "Revisão Manual"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "PrazoImplantacaoDiasUteis",
+              "displayName": "PrazoImplantacaoDiasUteis",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioServicoMensal",
+              "displayName": "DataInicioServicoMensal",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroStatus",
+              "displayName": "Financeiro Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastro",
+                  "value": "Aguardando Cadastro"
+                },
+                {
+                  "name": "Cadastro Realizado",
+                  "value": "Cadastro Realizado"
+                },
+                {
+                  "name": "Formulario Enviado",
+                  "value": "Formulario Enviado"
+                },
+                {
+                  "name": "Aguardando Formulario",
+                  "value": "Aguardando Formulario"
+                },
+                {
+                  "name": "Formulario Recebido",
+                  "value": "Formulario Recebido"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "CadastrosStatus",
+              "displayName": "Cadastros Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastros",
+                  "value": "Aguardando Cadastros"
+                },
+                {
+                  "name": "Em Andamento",
+                  "value": "Em Andamento"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ComercialStatus",
+              "displayName": "Comercial Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Comercial",
+                  "value": "Aguardando Comercial"
+                },
+                {
+                  "name": "Kit de Boas-Vindas Enviado",
+                  "value": "Kit de Boas-Vindas Enviado"
+                },
+                {
+                  "name": "Aguardando Inclusao no Grupo",
+                  "value": "Aguardando Inclusao no Grupo"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "OperacionalStatus",
+              "displayName": "Operacional Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Operacional",
+                  "value": "Aguardando Operacional"
+                },
+                {
+                  "name": "Contato com Cliente Realizado",
+                  "value": "Contato com Cliente Realizado"
+                },
+                {
+                  "name": "Placa Instalada",
+                  "value": "Placa Instalada"
+                },
+                {
+                  "name": "Confirmacao de Instalacao Enviada",
+                  "value": "Confirmacao de Instalacao Enviada"
+                },
+                {
+                  "name": "Equipe Orientada",
+                  "value": "Equipe Orientada"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": false
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Observacao",
+              "displayName": "Observacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DocumentoAssinado",
+              "displayName": "DocumentoAssinado",
+              "canBeUsedToMatch": false,
+              "type": "boolean",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "PrazoImplantacaoDiasUteis0",
+              "displayName": "PrazoImplantacaoDiasUteis",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "NumeroProposta",
+              "displayName": "NumeroProposta",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ObjetoContrato",
+              "displayName": "ObjetoContrato",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "VigenciaMinimaMeses",
+              "displayName": "VigenciaMinimaMeses",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "AvisoPrevioDias",
+              "displayName": "AvisoPrevioDias",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TipoMovimento",
+              "displayName": "TipoMovimento",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Inclusão em Cliente Existente",
+                  "value": "Inclusão em Cliente Existente"
+                },
+                {
+                  "name": "Reajuste e Prorrogação",
+                  "value": "Reajuste e Prorrogação"
+                },
+                {
+                  "name": "Novo Cliente",
+                  "value": "Novo Cliente"
+                },
+                {
+                  "name": "Prorrogação",
+                  "value": "Prorrogação"
+                },
+                {
+                  "name": "Reajuste",
+                  "value": "Reajuste"
+                },
+                {
+                  "name": "Exclusão",
+                  "value": "Exclusão"
+                },
+                {
+                  "name": "Outro",
+                  "value": "Outro"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioContrato",
+              "displayName": "DataInicioContrato",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "IDContraktor",
+              "displayName": "IDContraktor",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioCobrancaMensal",
+              "displayName": "DataInicioCobrancaMensal",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataFimContrato",
+              "displayName": "DataFimContrato",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Contratantes",
+              "displayName": "Contratantes",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "LocaisInstalacao",
+              "displayName": "LocaisInstalacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ServicosContratados",
+              "displayName": "ServicosContratados",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TituloDocumento",
+              "displayName": "TituloDocumento",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroObservacao",
+              "displayName": "FinanceiroObservacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroDataConclusao",
+              "displayName": "FinanceiroDataConclusao",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataAssinatura",
+              "displayName": "Data Assinatura",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "HoraAssinatura",
+              "displayName": "HoraAssinatura",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "EmpresaAster",
+              "displayName": "EmpresaAster",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "CNPJAster",
+              "displayName": "CNPJAster",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TipoDocumento",
+              "displayName": "TipoDocumento",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua30Data",
+              "displayName": "Regua30Data",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade30Dias",
+              "displayName": "Regua de 30 Dias",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua60Data",
+              "displayName": "Regua60Data",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade60Dias",
+              "displayName": "Regua de 60 Dias",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua1AnoData",
+              "displayName": "Regua1AnoData",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade1Ano",
+              "displayName": "Regua de 1 Ano",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "OperacionalPendenciaEtapa",
+              "displayName": "OperacionalPendenciaEtapa",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "id": "id",
+              "displayName": "ID",
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": true,
+              "required": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "039f4d31-f6ff-43cc-b346-dc5031ce317a",
+      "name": "Buscar Status Atual",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -14784,
+        0
+      ],
+      "parameters": {
+        "resource": "item",
+        "operation": "get",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "item": {
+          "__rl": true,
+          "value": "={{ $('Organizar Resposta Operacional').item.json.itemId }}",
+          "mode": "id"
+        },
+        "simplify": false
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "b6fa539e-3a2d-43bc-90c5-e1e155392202",
+      "name": "Comercial e Operacional concluídos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -14560,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "46d84578-11e2-49bf-bedc-3ea00b60e54b",
+              "leftValue": "={{ $json.fields.ComercialStatus }}",
+              "rightValue": "Concluido",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "0cf26831-39bf-479a-a507-7ac4daf29b5e",
+              "leftValue": "={{ $json.fields.OperacionalStatus }}",
+              "rightValue": "Concluido",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "375ceda9-ebbc-4c5c-93d1-bb0dbbb1c228",
+      "name": "Finalizar Inclusão",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -14336,
+        -96
+      ],
+      "parameters": {
+        "resource": "item",
+        "operation": "update",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "StatusAutomacao": "={{ ['Reguade30Dias','Reguade60Dias','Reguade1Ano'].every(k => $('Buscar Status Atual').item.json.fields?.[k] === 'Enviado') ? 'Inclusão e Régua Concluídas' : 'Inclusão Concluída' }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Title",
+              "displayName": "Título",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "StatusAutomacao",
+              "displayName": "Status Automacao",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Financeiro e Cadastros",
+                  "value": "Aguardando Financeiro e Cadastros"
+                },
+                {
+                  "name": "Aguardando Comercial e Operacional",
+                  "value": "Aguardando Comercial e Operacional"
+                },
+                {
+                  "name": "Inclusão Concluída",
+                  "value": "Inclusão Concluída"
+                },
+                {
+                  "name": "Revisão Manual",
+                  "value": "Revisão Manual"
+                },
+                {
+                  "name": "Inclusão e Régua Concluídas",
+                  "value": "Inclusão e Régua Concluídas"
+                }
+              ],
+              "removed": false
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "PrazoImplantacaoDiasUteis",
+              "displayName": "PrazoImplantacaoDiasUteis",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioServicoMensal",
+              "displayName": "DataInicioServicoMensal",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroStatus",
+              "displayName": "Financeiro Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastro",
+                  "value": "Aguardando Cadastro"
+                },
+                {
+                  "name": "Cadastro Realizado",
+                  "value": "Cadastro Realizado"
+                },
+                {
+                  "name": "Formulario Enviado",
+                  "value": "Formulario Enviado"
+                },
+                {
+                  "name": "Aguardando Formulario",
+                  "value": "Aguardando Formulario"
+                },
+                {
+                  "name": "Formulario Recebido",
+                  "value": "Formulario Recebido"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "CadastrosStatus",
+              "displayName": "Cadastros Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Cadastros",
+                  "value": "Aguardando Cadastros"
+                },
+                {
+                  "name": "Em Andamento",
+                  "value": "Em Andamento"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ComercialStatus",
+              "displayName": "Comercial Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Comercial",
+                  "value": "Aguardando Comercial"
+                },
+                {
+                  "name": "Kit de Boas-Vindas Enviado",
+                  "value": "Kit de Boas-Vindas Enviado"
+                },
+                {
+                  "name": "Aguardando Inclusao no Grupo",
+                  "value": "Aguardando Inclusao no Grupo"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "OperacionalStatus",
+              "displayName": "Operacional Status",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando Operacional",
+                  "value": "Aguardando Operacional"
+                },
+                {
+                  "name": "Contato com Cliente Realizado",
+                  "value": "Contato com Cliente Realizado"
+                },
+                {
+                  "name": "Placa Instalada",
+                  "value": "Placa Instalada"
+                },
+                {
+                  "name": "Confirmacao de Instalacao Enviada",
+                  "value": "Confirmacao de Instalacao Enviada"
+                },
+                {
+                  "name": "Equipe Orientada",
+                  "value": "Equipe Orientada"
+                },
+                {
+                  "name": "Concluido",
+                  "value": "Concluido"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Observacao",
+              "displayName": "Observacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DocumentoAssinado",
+              "displayName": "DocumentoAssinado",
+              "canBeUsedToMatch": false,
+              "type": "boolean",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "PrazoImplantacaoDiasUteis0",
+              "displayName": "PrazoImplantacaoDiasUteis",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "NumeroProposta",
+              "displayName": "NumeroProposta",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ObjetoContrato",
+              "displayName": "ObjetoContrato",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "VigenciaMinimaMeses",
+              "displayName": "VigenciaMinimaMeses",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "AvisoPrevioDias",
+              "displayName": "AvisoPrevioDias",
+              "canBeUsedToMatch": false,
+              "type": "number",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TipoMovimento",
+              "displayName": "TipoMovimento",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Inclusão em Cliente Existente",
+                  "value": "Inclusão em Cliente Existente"
+                },
+                {
+                  "name": "Reajuste e Prorrogação",
+                  "value": "Reajuste e Prorrogação"
+                },
+                {
+                  "name": "Novo Cliente",
+                  "value": "Novo Cliente"
+                },
+                {
+                  "name": "Prorrogação",
+                  "value": "Prorrogação"
+                },
+                {
+                  "name": "Reajuste",
+                  "value": "Reajuste"
+                },
+                {
+                  "name": "Exclusão",
+                  "value": "Exclusão"
+                },
+                {
+                  "name": "Outro",
+                  "value": "Outro"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioContrato",
+              "displayName": "DataInicioContrato",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "IDContraktor",
+              "displayName": "IDContraktor",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataInicioCobrancaMensal",
+              "displayName": "DataInicioCobrancaMensal",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataFimContrato",
+              "displayName": "DataFimContrato",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Contratantes",
+              "displayName": "Contratantes",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "LocaisInstalacao",
+              "displayName": "LocaisInstalacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "ServicosContratados",
+              "displayName": "ServicosContratados",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TituloDocumento",
+              "displayName": "TituloDocumento",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroObservacao",
+              "displayName": "FinanceiroObservacao",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "FinanceiroDataConclusao",
+              "displayName": "FinanceiroDataConclusao",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "DataAssinatura",
+              "displayName": "Data Assinatura",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "HoraAssinatura",
+              "displayName": "HoraAssinatura",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "EmpresaAster",
+              "displayName": "EmpresaAster",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "CNPJAster",
+              "displayName": "CNPJAster",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "TipoDocumento",
+              "displayName": "TipoDocumento",
+              "canBeUsedToMatch": false,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua30Data",
+              "displayName": "Regua30Data",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade30Dias",
+              "displayName": "Regua de 30 Dias",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua60Data",
+              "displayName": "Regua60Data",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade60Dias",
+              "displayName": "Regua de 60 Dias",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Regua1AnoData",
+              "displayName": "Regua1AnoData",
+              "canBeUsedToMatch": false,
+              "type": "dateTime",
+              "removed": true
+            },
+            {
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": false,
+              "required": false,
+              "id": "Reguade1Ano",
+              "displayName": "Regua de 1 Ano",
+              "canBeUsedToMatch": false,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Aguardando",
+                  "value": "Aguardando"
+                },
+                {
+                  "name": "Enviado",
+                  "value": "Enviado"
+                },
+                {
+                  "name": "Pendente",
+                  "value": "Pendente"
+                }
+              ],
+              "removed": true
+            },
+            {
+              "id": "id",
+              "displayName": "ID",
+              "defaultMatch": false,
+              "display": true,
+              "readOnly": true,
+              "required": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "385d78cd-172e-4f94-a034-89a29b9d48b1",
+      "name": "No Operation, do nothing1",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -14336,
+        96
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ff4474e4-c708-415d-9288-85505d940f35",
+      "name": "Resposta válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -16800,
+        -96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0fa13c00-a85f-4097-8ef8-3e9ceadcb075",
+              "leftValue": "={{ $json.resposta }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "0af0fbf5-37c9-40a7-ba02-5ca6ce02b377",
+              "leftValue": "={{ $json.resposta }}",
+              "rightValue": "⚠️",
+              "operator": {
+                "type": "string",
+                "operation": "notStartsWith"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "0b941755-67a3-44af-bf5b-dcf1532591f4",
+      "name": "Pendente ou voto removido - Sem ação",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -16576,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a7d87617-3079-439d-9e15-c248ce167bea",
+      "name": "Redis DEL - Enquete respondida",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -15680,
+        -384
+      ],
+      "parameters": {
+        "operation": "delete",
+        "key": "={{ $json.chave }}"
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "2d09571b-c585-4feb-80e6-7a0dc7e4f180",
+      "name": "Redis INCR - Trava de clique duplo",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -16576,
+        -192
+      ],
+      "parameters": {
+        "operation": "incr",
+        "key": "={{ 'inclusao:lock:operacional:' + $('Organizar Resposta Operacional').item.json.pollId }}",
+        "expire": true,
+        "ttl": 7776000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "3ec11d26-a298-41c1-bbef-1fa9e016bea7",
+      "name": "Primeiro clique?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -16352,
+        -192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "08148f5d-b78f-4993-b3db-3575f832e44f",
+              "leftValue": "={{ Number(Object.values($json)[0]) === 1 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "86f1af27-5007-423e-85c4-08907102ff7f",
+      "name": "Clique repetido - Ignorar",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -16128,
+        -192
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "866bde26-50f2-4129-95d6-c3a7e9b5cfd0",
+      "name": "Buscar Cliente para Mensagem (Placa)",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -14784,
+        -480
+      ],
+      "parameters": {
+        "resource": "item",
+        "operation": "get",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "item": {
+          "__rl": true,
+          "value": "={{ $('Organizar Resposta Operacional').item.json.itemId }}",
+          "mode": "id"
+        },
+        "simplify": false
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "f5e6cec2-539c-41bf-b88c-87ceac75307b",
+      "name": "Preparar Mensagem (Placa)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -14560,
+        -480
+      ],
+      "parameters": {
+        "jsCode": "// Cabeçalho padrão das mensagens do Comercial e do Operacional:\n// Bolsão + cada cliente com nome, endereço, telefone e e-mail (coluna \"Cliente\" do Lists)\n// Coluna \"Cliente\" = só o nome; Telefone, Email, Rua e Numero ficam em colunas próprias (uma linha por cliente).\n// Itens antigos: \"Nome, Rua e número, e-mail, Tel: ...\" na própria coluna Cliente.\nconst linhasCliente = f => {\n  const col = v => String(v || '').split('\\n').map(s => s.trim());\n  const nomes = col(f.Cliente || f.Bolsao).filter(Boolean);\n  if (!(f.Telefone || f.Email || f.Rua || f.Numero)) return nomes;\n  return nomes.map((nome, i) => {\n    const partes = [nome.replace(/,/g, ' '), [col(f.Rua)[i], col(f.Numero)[i]].filter(Boolean).join(' ').replace(/,/g, ' '), col(f.Email)[i]].filter(Boolean);\n    if (col(f.Telefone)[i]) partes.push('Tel: ' + col(f.Telefone)[i]);\n    return partes.join(', ');\n  });\n};\nconst cabecalhoCliente = f => {\n  const linhas = linhasCliente(f);\n  const blocos = linhas.map(l => {\n    const partes = l.split(',').map(s => s.trim()).filter(Boolean);\n    const nome = (partes.shift() || '').split(' — ')[0].trim();\n    const email = (l.match(/[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+/) || [])[0];\n    const tel = (l.match(/Tel\\.?:\\s*([^,]+)/i) || [])[1];\n    const endereco = partes.filter(s => !s.includes('@') && !/^Tel\\.?:/i.test(s)).join(', ');\n    return `👤 *Cliente:* ${nome || 'Não informado'}\\n📍 *Endereço:* ${endereco || 'Não informado'}\\n📞 *Telefone:* ${tel ? tel.trim() : 'Não informado'}\\n📧 *E-mail:* ${email || 'Não informado'}`;\n  });\n  if (!blocos.length) blocos.push('👤 *Cliente:* Não informado\\n📍 *Endereço:* Não informado\\n📞 *Telefone:* Não informado\\n📧 *E-mail:* Não informado');\n  return `🏘️ *Bolsão:* ${f.Title || 'Não informado'}\\n\\n` + blocos.join('\\n\\n');\n};\n\nconst f = $json.fields || {};\nconst mensagem = `📣 *INCLUSÃO DE CLIENTE – OPERACIONAL*\n\n${cabecalhoCliente(f)}\n\n📌 *Próxima etapa:*\nRealizar a instalação da placa de identificação ASTER no cliente.\n\nApós concluir, selecione uma opção abaixo.`;\nreturn [{ json: { mensagem } }];"
+      }
+    },
+    {
+      "id": "8ae3c5bf-9543-4e17-994d-0af6c1cbfd3d",
+      "name": "Buscar Cliente para Mensagem (Equipe)",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -14784,
+        -288
+      ],
+      "parameters": {
+        "resource": "item",
+        "operation": "get",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "item": {
+          "__rl": true,
+          "value": "={{ $('Organizar Resposta Operacional').item.json.itemId }}",
+          "mode": "id"
+        },
+        "simplify": false
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "72f11406-7749-4592-aa3f-f9c57f2cd590",
+      "name": "Preparar Mensagem (Equipe)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -14560,
+        -288
+      ],
+      "parameters": {
+        "jsCode": "// Cabeçalho padrão das mensagens do Comercial e do Operacional:\n// Bolsão + cada cliente com nome, endereço, telefone e e-mail (coluna \"Cliente\" do Lists)\n// Coluna \"Cliente\" = só o nome; Telefone, Email, Rua e Numero ficam em colunas próprias (uma linha por cliente).\n// Itens antigos: \"Nome, Rua e número, e-mail, Tel: ...\" na própria coluna Cliente.\nconst linhasCliente = f => {\n  const col = v => String(v || '').split('\\n').map(s => s.trim());\n  const nomes = col(f.Cliente || f.Bolsao).filter(Boolean);\n  if (!(f.Telefone || f.Email || f.Rua || f.Numero)) return nomes;\n  return nomes.map((nome, i) => {\n    const partes = [nome.replace(/,/g, ' '), [col(f.Rua)[i], col(f.Numero)[i]].filter(Boolean).join(' ').replace(/,/g, ' '), col(f.Email)[i]].filter(Boolean);\n    if (col(f.Telefone)[i]) partes.push('Tel: ' + col(f.Telefone)[i]);\n    return partes.join(', ');\n  });\n};\nconst cabecalhoCliente = f => {\n  const linhas = linhasCliente(f);\n  const blocos = linhas.map(l => {\n    const partes = l.split(',').map(s => s.trim()).filter(Boolean);\n    const nome = (partes.shift() || '').split(' — ')[0].trim();\n    const email = (l.match(/[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+/) || [])[0];\n    const tel = (l.match(/Tel\\.?:\\s*([^,]+)/i) || [])[1];\n    const endereco = partes.filter(s => !s.includes('@') && !/^Tel\\.?:/i.test(s)).join(', ');\n    return `👤 *Cliente:* ${nome || 'Não informado'}\\n📍 *Endereço:* ${endereco || 'Não informado'}\\n📞 *Telefone:* ${tel ? tel.trim() : 'Não informado'}\\n📧 *E-mail:* ${email || 'Não informado'}`;\n  });\n  if (!blocos.length) blocos.push('👤 *Cliente:* Não informado\\n📍 *Endereço:* Não informado\\n📞 *Telefone:* Não informado\\n📧 *E-mail:* Não informado');\n  return `🏘️ *Bolsão:* ${f.Title || 'Não informado'}\\n\\n` + blocos.join('\\n\\n');\n};\n\nconst f = $json.fields || {};\nconst mensagem = `📣 *INCLUSÃO DE CLIENTE – OPERACIONAL*\n\n${cabecalhoCliente(f)}\n\n📌 *Próxima etapa:*\nOrientar a equipe operacional sobre a entrada do novo cliente.\n\nApós concluir, selecione uma opção abaixo.`;\nreturn [{ json: { mensagem } }];"
+      }
+    },
+    {
+      "id": "6ab60716-4787-4345-9703-12fdb016fc19",
+      "name": "Detalhes - Enviar Enquete Operacional - Instalação da Placa",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -13888,
+        -480
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: ($('Validar Número - Operacional (Placa)').item.json.chatId || $('Destinatários - Operacional (Placa)').item.json.chatId),\n  text: (() => { const m = String($('Preparar Mensagem (Placa)').item.json.mensagem); const i = m.lastIndexOf('\\u{1F4CC}'); return (i >= 0 ? m.slice(0, i) : m).trim(); })()\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "daf7547a-4c02-4322-9c05-00f678fd65db",
+      "name": "Detalhes - Enviar Enquete Operacional - Orientação da Equipe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -13888,
+        -288
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: ($('Validar Número - Operacional (Equipe)').item.json.chatId || $('Destinatários - Operacional (Equipe)').item.json.chatId),\n  text: (() => { const m = String($('Preparar Mensagem (Equipe)').item.json.mensagem); const i = m.lastIndexOf('\\u{1F4CC}'); return (i >= 0 ? m.slice(0, i) : m).trim(); })()\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "d827fef5-805b-4c7b-98fb-b72cac821db4",
+      "name": "Destinatários - Operacional (Placa)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -14336,
+        -480
+      ],
+      "parameters": {
+        "jsCode": "// Quem recebe as mensagens do Operacional (formato 55 + DDD + número, só dígitos).\n// Números inválidos ou ainda não preenchidos são ignorados.\nconst NUMEROS = [\n  '5511999999999',          // Responsável pela automação (testes) – remover em produção\n  // '5511999999999',       // Diretor Operacional – desativado durante os testes\n];\n\nconst valido = n => String(n).replace(/\\D/g, '');\nconst lista = arr => [...new Set(arr.map(valido).filter(n => n.length >= 12 && n.length <= 13))].map(n => n + '@c.us');\nconst destinos = lista(NUMEROS);\nconst saida = [];\n$input.all().forEach((item, i) => destinos.forEach(chatId => saida.push({ json: { ...item.json, chatId }, pairedItem: { item: i } })));\nreturn saida;"
+      }
+    },
+    {
+      "id": "ddd1e902-7d00-4f7e-ad38-ef56f9952537",
+      "name": "Destinatários - Operacional (Equipe)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -14336,
+        -288
+      ],
+      "parameters": {
+        "jsCode": "// Quem recebe as mensagens do Operacional (formato 55 + DDD + número, só dígitos).\n// Números inválidos ou ainda não preenchidos são ignorados.\nconst NUMEROS = [\n  '5511999999999',          // Responsável pela automação (testes) – remover em produção\n  // '5511999999999',       // Diretor Operacional – desativado durante os testes\n];\n\nconst valido = n => String(n).replace(/\\D/g, '');\nconst lista = arr => [...new Set(arr.map(valido).filter(n => n.length >= 12 && n.length <= 13))].map(n => n + '@c.us');\nconst destinos = lista(NUMEROS);\nconst saida = [];\n$input.all().forEach((item, i) => destinos.forEach(chatId => saida.push({ json: { ...item.json, chatId }, pairedItem: { item: i } })));\nreturn saida;"
+      }
+    },
+    {
+      "id": "71876735-1291-4a1d-be22-1c99ffff1c08",
+      "name": "Redis KEYS - Cópias da enquete",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -16128,
+        -384
+      ],
+      "parameters": {
+        "operation": "keys",
+        "keyPattern": "inclusao:operacional:poll:*"
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "7495a794-0386-4a76-82d7-f6b6eb00cdfc",
+      "name": "Listar Cópias da Enquete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -15904,
+        -384
+      ],
+      "parameters": {
+        "jsCode": "// A mesma etapa pode ter sido enviada para mais de um número (e em lembretes).\n// Respondida uma delas, fecha todas, para a etapa não ser executada duas vezes.\nconst r = $('Organizar Resposta Operacional').first().json;\nconst chaves = new Set(['inclusao:operacional:poll:' + r.pollId]);\nfor (const [k, v] of Object.entries($json || {})) {\n  try { const d = JSON.parse(v); if (String(d.itemId) === String(r.itemId) && d.etapa === r.etapa) chaves.add(k); } catch (e) {}\n}\nreturn [...chaves].map(chave => ({ json: { chave } }));"
+      }
+    },
+    {
+      "id": "ce250d6b-342a-484c-a3fb-3a8bb6780552",
+      "name": "Seguir uma vez",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -15456,
+        -384
+      ],
+      "parameters": {
+        "jsCode": "// Continua com um único item, independente de quantas enquetes foram fechadas\nreturn [{ json: {}, pairedItem: { item: 0 } }];"
+      }
+    },
+    {
+      "id": "773265d8-f3d3-4a20-9bc1-fcc3b291ec26",
+      "name": "Validar Número - Operacional (Placa)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        -14112,
+        -480
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:3000/api/contacts/check-exists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.chatId.replace('@c.us', '') }}"
+            },
+            {
+              "name": "session",
+              "value": "<<PREENCHER>>"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d98e79bc-02ce-4954-97fb-176fc60a016a",
+      "name": "Validar Número - Operacional (Equipe)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        -14112,
+        -288
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:3000/api/contacts/check-exists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.chatId.replace('@c.us', '') }}"
+            },
+            {
+              "name": "session",
+              "value": "<<PREENCHER>>"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Redis GET - Operacional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis GET - Operacional": {
+      "main": [
+        [
+          {
+            "node": "Resposta pertence ao Operacional?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resposta pertence ao Operacional?": {
+      "main": [
+        [
+          {
+            "node": "Organizar Resposta Operacional",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Organizar Resposta Operacional": {
+      "main": [
+        [
+          {
+            "node": "Resposta válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resposta Operacional": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Operacional - Contato Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Atualizar Operacional - Placa Instalada",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Concluir Operacional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Operacional - Contato Cliente": {
+      "main": [
+        [
+          {
+            "node": "Buscar Cliente para Mensagem (Placa)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Enquete Operacional - Instalação da Placa": {
+      "main": [
+        [
+          {
+            "node": "Redis SET - Operacional Instalação Placa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Operacional - Placa Instalada": {
+      "main": [
+        [
+          {
+            "node": "Buscar Cliente para Mensagem (Equipe)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Enquete Operacional - Orientação da Equipe": {
+      "main": [
+        [
+          {
+            "node": "Redis SET - Operacional Equipe Orientada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Concluir Operacional": {
+      "main": [
+        [
+          {
+            "node": "Buscar Status Atual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Status Atual": {
+      "main": [
+        [
+          {
+            "node": "Comercial e Operacional concluídos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comercial e Operacional concluídos?": {
+      "main": [
+        [
+          {
+            "node": "Finalizar Inclusão",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resposta válida?": {
+      "main": [
+        [
+          {
+            "node": "Redis INCR - Trava de clique duplo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pendente ou voto removido - Sem ação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis DEL - Enquete respondida": {
+      "main": [
+        [
+          {
+            "node": "Seguir uma vez",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis INCR - Trava de clique duplo": {
+      "main": [
+        [
+          {
+            "node": "Primeiro clique?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Primeiro clique?": {
+      "main": [
+        [
+          {
+            "node": "Redis KEYS - Cópias da enquete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Clique repetido - Ignorar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Cliente para Mensagem (Placa)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Mensagem (Placa)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Mensagem (Placa)": {
+      "main": [
+        [
+          {
+            "node": "Destinatários - Operacional (Placa)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Cliente para Mensagem (Equipe)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Mensagem (Equipe)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Mensagem (Equipe)": {
+      "main": [
+        [
+          {
+            "node": "Destinatários - Operacional (Equipe)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detalhes - Enviar Enquete Operacional - Instalação da Placa": {
+      "main": [
+        [
+          {
+            "node": "Enviar Enquete Operacional - Instalação da Placa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detalhes - Enviar Enquete Operacional - Orientação da Equipe": {
+      "main": [
+        [
+          {
+            "node": "Enviar Enquete Operacional - Orientação da Equipe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Destinatários - Operacional (Placa)": {
+      "main": [
+        [
+          {
+            "node": "Validar Número - Operacional (Placa)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Destinatários - Operacional (Equipe)": {
+      "main": [
+        [
+          {
+            "node": "Validar Número - Operacional (Equipe)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis KEYS - Cópias da enquete": {
+      "main": [
+        [
+          {
+            "node": "Listar Cópias da Enquete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar Cópias da Enquete": {
+      "main": [
+        [
+          {
+            "node": "Redis DEL - Enquete respondida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seguir uma vez": {
+      "main": [
+        [
+          {
+            "node": "Resposta Operacional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Número - Operacional (Placa)": {
+      "main": [
+        [
+          {
+            "node": "Detalhes - Enviar Enquete Operacional - Instalação da Placa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Número - Operacional (Equipe)": {
+      "main": [
+        [
+          {
+            "node": "Detalhes - Enviar Enquete Operacional - Orientação da Equipe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "meta": null,
+  "tags": []
+}

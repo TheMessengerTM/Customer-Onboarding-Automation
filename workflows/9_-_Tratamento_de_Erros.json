@@ -1,0 +1,64 @@
+{
+  "name": "9 - Tratamento de Erros",
+  "description": null,
+  "active": false,
+  "versionCounter": 6,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "0a1a9c11-05c9-401a-a0a2-3d2cab2c6a4d",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        16,
+        -64
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d26d5946-c4f4-4a4f-8e7d-4ec5f0669e82",
+      "name": "Avisar Erro no WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        240,
+        -64
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: \"<<PREENCHER>>\",\n  text: \"🚨 *ERRO NA AUTOMAÇÃO\" + (/encerramento|recupera|justificativa|controle de prazos|operacional e sistemas|webhook de (mensagem do comercial|resposta do operacional)/i.test($json.workflow?.name || '') ? \" DE ENCERRAMENTO\" : \" DE INCLUSÃO\") + \"*\\n\\n\" +\n    \"⚙️ *Workflow:* \" + ($json.workflow?.name || '-') +\n    \"\\n🧩 *Nó:* \" + ($json.execution?.lastNodeExecuted || '-') +\n    \"\\n❗ *Erro:* \" + ($json.execution?.error?.message || '-') +\n    \"\\n🔗 \" + ($json.execution?.url || '').replace(/^https?:\\/\\/[^/]+/, 'http://127.0.0.1:5678')\n}\n}}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Avisar Erro no WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "meta": null,
+  "tags": []
+}

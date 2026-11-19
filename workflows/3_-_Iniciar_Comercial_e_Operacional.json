@@ -1,0 +1,824 @@
+{
+  "name": "3 - Iniciar Comercial e Operacional",
+  "description": null,
+  "active": false,
+  "versionCounter": 40,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "b54f72c5-35a8-400f-a756-773d9a09ee13",
+      "name": "Buscar Cliente no Lists",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -6896,
+        -576
+      ],
+      "parameters": {
+        "resource": "item",
+        "operation": "get",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional"
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "item": {
+          "__rl": true,
+          "value": "={{ $('Webhook').item.json.body.itemId }}",
+          "mode": "id"
+        },
+        "simplify": false,
+        "requestOptions": {}
+      },
+      "credentials": {
+        "microsoftSharePointOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftSharePointOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "654618c2-5ff0-415a-9ce2-2aa84e16b6f2",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -7120,
+        -576
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inclusao-comercial-operacional",
+        "options": {}
+      }
+    },
+    {
+      "id": "110039f5-bcfb-47b8-beff-3c3a41d29746",
+      "name": "Pode iniciar Comercial e Operacional?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -6672,
+        -576
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8a2bd84e-a5a3-4697-bbe7-9bbeb2b531dc",
+              "leftValue": "={{ $json.fields.StatusAutomacao }}",
+              "rightValue": "Aguardando Comercial e Operacional",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "87ed7f51-0d12-4458-b77d-16211addcc97",
+              "leftValue": "={{ $json.fields.ComercialStatus }}",
+              "rightValue": "Aguardando Comercial",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "dab8ac69-c69c-4d51-8d33-c5327a0a15d5",
+              "leftValue": "={{ $json.fields.OperacionalStatus }}",
+              "rightValue": "Aguardando Operacional",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "396907d7-da10-4c6a-a62e-3b706598a28b",
+      "name": "Redis INCR - Trava Comercial e Operacional",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -6448,
+        -576
+      ],
+      "parameters": {
+        "operation": "incr",
+        "key": "={{ 'inclusao:comercial-operacional:iniciado:' + $('Buscar Cliente no Lists').item.json.id }}",
+        "expire": true,
+        "ttl": 15552000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "4b4d1cb3-2e35-4149-8b09-d6842446da7e",
+      "name": "Comercial e Operacional já iniciados?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -6224,
+        -576
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6b4c3d78-531f-46ea-a37d-02d4f58ea405",
+              "leftValue": "={{ Number(Object.values($json)[0]) > 1 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "cf9713f4-b58d-4aa5-b84d-4137c92f9f32",
+      "name": "Já acionados - Encerrar",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -6000,
+        -672
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d3d415cd-e920-417e-a365-2bebaddefdec",
+      "name": "Redis SET - Registro do Início",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -6000,
+        -480
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'inclusao:comercial-operacional:registro:' + $('Buscar Cliente no Lists').item.json.id }}",
+        "value": "={{ JSON.stringify({   itemId: $('Buscar Cliente no Lists').item.json.id,   cliente: $('Buscar Cliente no Lists').item.json.fields.Title,   origem: $('Webhook').item.json.body.origem,   iniciadoEm: $now.toISO() }) }}",
+        "expire": true,
+        "ttl": 15552000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "0388ab65-647e-4ade-8547-49b57de9374c",
+      "name": "Preparar Mensagem Comercial",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5776,
+        -576
+      ],
+      "parameters": {
+        "jsCode": "// Cabeçalho padrão das mensagens do Comercial e do Operacional:\n// Bolsão + cada cliente com nome, endereço, telefone e e-mail (coluna \"Cliente\" do Lists)\n// Coluna \"Cliente\" = só o nome; Telefone, Email, Rua e Numero ficam em colunas próprias (uma linha por cliente).\n// Itens antigos: \"Nome, Rua e número, e-mail, Tel: ...\" na própria coluna Cliente.\nconst linhasCliente = f => {\n  const col = v => String(v || '').split('\\n').map(s => s.trim());\n  const nomes = col(f.Cliente || f.Bolsao).filter(Boolean);\n  if (!(f.Telefone || f.Email || f.Rua || f.Numero)) return nomes;\n  return nomes.map((nome, i) => {\n    const partes = [nome.replace(/,/g, ' '), [col(f.Rua)[i], col(f.Numero)[i]].filter(Boolean).join(' ').replace(/,/g, ' '), col(f.Email)[i]].filter(Boolean);\n    if (col(f.Telefone)[i]) partes.push('Tel: ' + col(f.Telefone)[i]);\n    return partes.join(', ');\n  });\n};\nconst cabecalhoCliente = f => {\n  const linhas = linhasCliente(f);\n  const blocos = linhas.map(l => {\n    const partes = l.split(',').map(s => s.trim()).filter(Boolean);\n    const nome = (partes.shift() || '').split(' — ')[0].trim();\n    const email = (l.match(/[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+/) || [])[0];\n    const tel = (l.match(/Tel\\.?:\\s*([^,]+)/i) || [])[1];\n    const endereco = partes.filter(s => !s.includes('@') && !/^Tel\\.?:/i.test(s)).join(', ');\n    return `👤 *Cliente:* ${nome || 'Não informado'}\\n📍 *Endereço:* ${endereco || 'Não informado'}\\n📞 *Telefone:* ${tel ? tel.trim() : 'Não informado'}\\n📧 *E-mail:* ${email || 'Não informado'}`;\n  });\n  if (!blocos.length) blocos.push('👤 *Cliente:* Não informado\\n📍 *Endereço:* Não informado\\n📞 *Telefone:* Não informado\\n📧 *E-mail:* Não informado');\n  return `🏘️ *Bolsão:* ${f.Title || 'Não informado'}\\n\\n` + blocos.join('\\n\\n');\n};\n\nconst cliente = $('Buscar Cliente no Lists').item.json;\nconst f = cliente.fields;\n\nconst mensagem = `🆕 *INCLUSÃO DE CLIENTE – COMERCIAL*\n\n${cabecalhoCliente(f)}\n\n📌 *Ação necessária:*\nEnviar o Kit de Boas-Vindas ao cliente.\n\nApós concluir, selecione uma opção abaixo.`;\n\nreturn [{\n  json: {\n    itemId: cliente.id,\n    cliente: f.Title,\n    mensagem\n  }\n}];"
+      }
+    },
+    {
+      "id": "a52e5a81-a00e-4351-ae65-f96572233bf6",
+      "name": "Preparar Mensagem Operacional",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5776,
+        -384
+      ],
+      "parameters": {
+        "jsCode": "// Cabeçalho padrão das mensagens do Comercial e do Operacional:\n// Bolsão + cada cliente com nome, endereço, telefone e e-mail (coluna \"Cliente\" do Lists)\n// Coluna \"Cliente\" = só o nome; Telefone, Email, Rua e Numero ficam em colunas próprias (uma linha por cliente).\n// Itens antigos: \"Nome, Rua e número, e-mail, Tel: ...\" na própria coluna Cliente.\nconst linhasCliente = f => {\n  const col = v => String(v || '').split('\\n').map(s => s.trim());\n  const nomes = col(f.Cliente || f.Bolsao).filter(Boolean);\n  if (!(f.Telefone || f.Email || f.Rua || f.Numero)) return nomes;\n  return nomes.map((nome, i) => {\n    const partes = [nome.replace(/,/g, ' '), [col(f.Rua)[i], col(f.Numero)[i]].filter(Boolean).join(' ').replace(/,/g, ' '), col(f.Email)[i]].filter(Boolean);\n    if (col(f.Telefone)[i]) partes.push('Tel: ' + col(f.Telefone)[i]);\n    return partes.join(', ');\n  });\n};\nconst cabecalhoCliente = f => {\n  const linhas = linhasCliente(f);\n  const blocos = linhas.map(l => {\n    const partes = l.split(',').map(s => s.trim()).filter(Boolean);\n    const nome = (partes.shift() || '').split(' — ')[0].trim();\n    const email = (l.match(/[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+/) || [])[0];\n    const tel = (l.match(/Tel\\.?:\\s*([^,]+)/i) || [])[1];\n    const endereco = partes.filter(s => !s.includes('@') && !/^Tel\\.?:/i.test(s)).join(', ');\n    return `👤 *Cliente:* ${nome || 'Não informado'}\\n📍 *Endereço:* ${endereco || 'Não informado'}\\n📞 *Telefone:* ${tel ? tel.trim() : 'Não informado'}\\n📧 *E-mail:* ${email || 'Não informado'}`;\n  });\n  if (!blocos.length) blocos.push('👤 *Cliente:* Não informado\\n📍 *Endereço:* Não informado\\n📞 *Telefone:* Não informado\\n📧 *E-mail:* Não informado');\n  return `🏘️ *Bolsão:* ${f.Title || 'Não informado'}\\n\\n` + blocos.join('\\n\\n');\n};\n\nconst cliente = $('Buscar Cliente no Lists').item.json;\nconst f = cliente.fields;\n\nconst mensagem = `🆕 *INCLUSÃO DE CLIENTE – OPERACIONAL*\n\n${cabecalhoCliente(f)}\n\n📌 *Ação necessária:*\nEntrar em contato com o novo cliente.\n\nApós concluir, selecione uma opção abaixo.`;\n\nreturn [{\n  json: {\n    itemId: cliente.id,\n    cliente: f.Title,\n    mensagem\n  }\n}];"
+      }
+    },
+    {
+      "id": "21313741-a05d-414f-b0e8-c7facdeaa188",
+      "name": "Enviar Enquete Comercial - Kit Boas-Vindas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -4880,
+        -576
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendPoll",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  chatId: ($('Validar Número - Comercial').item.json.chatId || $('Destinatários - Comercial').item.json.chatId),\n  poll: {\n    name: (() => { const m = String($('Preparar Mensagem Comercial').item.json.mensagem); const b = (m.match(/Bols\\u00e3o:\\*\\s*([^\\n]+)/) || [])[1]; const t = (m.split('\\n')[0] || '').trim(); const i = m.lastIndexOf('\\u{1F4CC}'); const a = (i >= 0 ? m.slice(i) : '').split('\\n\\nApós')[0].replace(/\\*/g, '').trim(); return (a || t).slice(0, 250); })(),\n    options: [\n      \"✅ Kit de Boas-Vindas enviado\",\n      \"⚠️ Pendente\"\n    ],\n    multipleAnswers: false\n  },\n  session: \"automacao_encerramento_and_adesao\"\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "97a02cfe-8cc9-4b0d-ac75-801d92a7f7fc",
+      "name": "Redis SET - Comercial Kit Boas-Vindas",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -4656,
+        -576
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'inclusao:comercial:poll:' + $('Enviar Enquete Comercial - Kit Boas-Vindas').item.json._data.Info.ID }}",
+        "value": "={{ JSON.stringify({   itemId: $('Preparar Mensagem Comercial').item.json.itemId,   cliente: $('Preparar Mensagem Comercial').item.json.cliente,   etapa: 'Kit Boas-Vindas Comercial' }) }}",
+        "expire": true,
+        "ttl": 7776000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "d90e4d1c-afe0-4230-a345-c37acef7d491",
+      "name": "Enviar Enquete Operacional - Contato Cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -4880,
+        -384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendPoll",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  chatId: ($('Validar Número - Operacional').item.json.chatId || $('Destinatários - Operacional').item.json.chatId),\n  poll: {\n    name: (() => { const m = String($('Preparar Mensagem Operacional').item.json.mensagem); const b = (m.match(/Bols\\u00e3o:\\*\\s*([^\\n]+)/) || [])[1]; const t = (m.split('\\n')[0] || '').trim(); const i = m.lastIndexOf('\\u{1F4CC}'); const a = (i >= 0 ? m.slice(i) : '').split('\\n\\nApós')[0].replace(/\\*/g, '').trim(); return (a || t).slice(0, 250); })(),\n    options: [\n      \"✅ Contato realizado\",\n      \"⚠️ Pendente\"\n    ],\n    multipleAnswers: false\n  },\n  session: \"automacao_encerramento_and_adesao\"\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "15689bc4-33e6-4aa8-97e7-ce0a7139162a",
+      "name": "Redis SET - Operacional Contato Cliente",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -4656,
+        -384
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'inclusao:operacional:poll:' + $('Enviar Enquete Operacional - Contato Cliente').item.json._data.Info.ID }}",
+        "value": "={{ JSON.stringify({   itemId: $('Preparar Mensagem Operacional').item.json.itemId,   cliente: $('Preparar Mensagem Operacional').item.json.cliente,   etapa: 'Contato Cliente Operacional' }) }}",
+        "expire": true,
+        "ttl": 7776000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "278ea65b-f531-41cb-95b0-7d6857111592",
+      "name": "Detalhes - Enviar Enquete Comercial - Kit Boas-Vindas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -5104,
+        -576
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: ($('Validar Número - Comercial').item.json.chatId || $('Destinatários - Comercial').item.json.chatId),\n  text: (() => { const m = String($('Preparar Mensagem Comercial').item.json.mensagem); const i = m.lastIndexOf('\\u{1F4CC}'); const d = $('Destinatários - Comercial').item.json; const avisos = [d.aviso, (d.bolsaoMatriz && !d.kitCaminho) ? 'Kit de Boas-Vindas não anexado no bolsão ' + d.bolsaoMatriz + ' (Matriz Bolsões).' : ''].filter(Boolean); return ((i >= 0 ? m.slice(0, i) : m).trim() + avisos.map(a => '\\n\\n⚠️ ' + a).join('')); })()\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "927de616-8dca-45f3-ae46-3c6ed49875fb",
+      "name": "Detalhes - Enviar Enquete Operacional - Contato Cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        -5104,
+        -384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: ($('Validar Número - Operacional').item.json.chatId || $('Destinatários - Operacional').item.json.chatId),\n  text: (() => { const m = String($('Preparar Mensagem Operacional').item.json.mensagem); const i = m.lastIndexOf('\\u{1F4CC}'); return (i >= 0 ? m.slice(0, i) : m).trim(); })()\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "b913b934-e823-434d-bb8a-6d34b39c794d",
+      "name": "Destinatários - Comercial",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5552,
+        -576
+      ],
+      "parameters": {
+        "jsCode": "// ===== Representante comercial do bolsão =====\n// O responsável de cada bolsão vem da coluna \"Responsável\" da lista \"Matriz Bolsões\" (SharePoint).\n// Aqui fica só o WhatsApp de cada responsável, pelo e-mail dele (formato 55 + DDD + número).\nconst REPRESENTANTES = {\n  'exemplo4@exemplo.com':  '5511999999999',   // Responsável A\n  'exemplo5@exemplo.com': '5511999999999',   // Responsável B\n};\n// Recebe sempre. Também é o único destino quando o bolsão não é encontrado na Matriz.\nconst SEMPRE = [\n  '5511999999999',          // Responsável pela automação\n];\n// EM TESTE: true = cada representante é trocado pelo número de teste abaixo.\n// Para colocar em produção, troque para false.\nconst MODO_TESTE = true;\nconst NUMEROS_TESTE = {\n  'exemplo4@exemplo.com':  '5511999999999',   // bolsões do Responsável A → Responsável pela automação\n  // 5511999999999 é o próprio WhatsApp da automação: mensagem para ele mesmo não chega\n  'exemplo5@exemplo.com': '5511999999999',   // bolsões da Ana → Responsável pela automação\n};\n\nconst norm = s => ' ' + String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()\n  .replace(/[^a-z0-9]+/g, ' ')\n  .replace(/\\b(rua|r|av|avenida|alameda|al|praca|travessa|estrada|bolsao)\\b/g, ' ')\n  .replace(/\\s+/g, ' ').trim() + ' ';\n\n// Procura o bolsão da inclusão na Matriz (ignora acentos, maiúsculas e \"Rua\", \"Av.\" etc.)\nconst acharBolsao = (textos, matriz) => {\n  for (const t of textos) {\n    const alvo = norm(t);\n    if (alvo.trim().length < 3) continue;\n    const achados = (matriz || []).filter(b => {\n      const n = norm(b.Title);\n      return n.trim().length >= 3 && (alvo.includes(n) || n.includes(alvo));\n    });\n    if (achados.length) return achados.sort((a, b) => norm(b.Title).length - norm(a.Title).length)[0];\n  }\n  return null;\n};\n\nconst representante = (textos, resposta) => {\n  const lista = resposta && Array.isArray(resposta.value) ? resposta.value : null;\n  const b = lista ? acharBolsao(textos, lista) : null;\n  const resp = (b && b.Respons_x00e1_vel) || {};\n  const email = String(resp.EMail || '').toLowerCase();\n  const tel = MODO_TESTE ? NUMEROS_TESTE[email] : REPRESENTANTES[email];\n  const anexos = (b && b.AttachmentFiles) || [];\n  const kit = anexos.find(a => /\\.pdf$/i.test(a.FileName)) || anexos[0] || null;\n  let aviso = '';\n  if (!lista) aviso = 'Não foi possível consultar a Matriz Bolsões. Mensagem enviada só para o responsável pela automação.';\n  else if (!b) aviso = 'Bolsão não encontrado na Matriz Bolsões. Mensagem enviada só para o responsável pela automação.';\n  else if (!tel) aviso = `Responsável \"${resp.Title || 'não preenchido'}\" do bolsão ${b.Title} sem WhatsApp cadastrado na automação.`;\n  if (MODO_TESTE && tel) aviso = `MODO TESTE – em produção esta mensagem iria para ${resp.Title} (${REPRESENTANTES[email] || 'sem número'}).`;\n  return {\n    bolsaoMatriz: b ? b.Title : null,\n    representante: tel ? (resp.Title || null) : null,\n    // em teste vai só para o número de teste do representante; em produção, representante + SEMPRE\n    numeros: MODO_TESTE ? (tel ? [tel] : SEMPRE) : (tel ? [tel] : []).concat(SEMPRE),\n    aviso,\n    kitNome: kit ? kit.FileName : null,\n    kitCaminho: kit ? kit.ServerRelativeUrl : null,\n  };\n};\n\nconst valido = n => String(n).replace(/\\D/g, '');\nconst lista = arr => [...new Set(arr.map(valido).filter(n => n.length >= 12 && n.length <= 13))].map(n => n + '@c.us');\n\n// Mensagem do Comercial (Kit de Boas-Vindas): vai para o representante do bolsão\nconst f = ($('Buscar Cliente no Lists').first().json.fields) || {};\nconst saida = [];\n$input.all().forEach((item, i) => {\n  const orig = $('Preparar Mensagem Comercial').itemMatching(i).json;\n  const r = representante([f.Title, f.LocaisInstalacao], item.json);\n  lista(r.numeros).forEach(chatId => saida.push({ json: { ...orig, ...r, chatId }, pairedItem: { item: i } }));\n});\nreturn saida;\n"
+      }
+    },
+    {
+      "id": "890d5995-f9af-4a0d-b11c-fdbcfd546ab9",
+      "name": "Destinatários - Operacional",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5552,
+        -384
+      ],
+      "parameters": {
+        "jsCode": "// Quem recebe as mensagens do Operacional (formato 55 + DDD + número, só dígitos).\n// Números inválidos ou ainda não preenchidos são ignorados.\nconst NUMEROS = [\n  '5511999999999',          // Responsável pela automação (testes) – remover em produção\n  // '5511999999999',       // Diretor Operacional – desativado durante os testes\n];\n\nconst valido = n => String(n).replace(/\\D/g, '');\nconst lista = arr => [...new Set(arr.map(valido).filter(n => n.length >= 12 && n.length <= 13))].map(n => n + '@c.us');\nconst destinos = lista(NUMEROS);\nconst saida = [];\n$input.all().forEach((item, i) => destinos.forEach(chatId => saida.push({ json: { ...item.json, chatId }, pairedItem: { item: i } })));\nreturn saida;"
+      }
+    },
+    {
+      "id": "efadf705-a51a-4961-9f6c-9bc4af304c1b",
+      "name": "Validar Número - Comercial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        -5328,
+        -576
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:3000/api/contacts/check-exists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.chatId.replace('@c.us', '') }}"
+            },
+            {
+              "name": "session",
+              "value": "<<PREENCHER>>"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1fb9ae6b-b6bf-4ebe-a6b9-717ee5732220",
+      "name": "Validar Número - Operacional",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        -5328,
+        -384
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:3000/api/contacts/check-exists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.chatId.replace('@c.us', '') }}"
+            },
+            {
+              "name": "session",
+              "value": "<<PREENCHER>>"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e29b24ee-2e81-4bcc-bd27-468ac07578b8",
+      "name": "Buscar Matriz Bolsões - Comercial",
+      "notes": "Lista 'Matriz Bolsões' (Gestão Operacional): responsável e Kit de Boas-Vindas de cada bolsão.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        -5664,
+        -756
+      ],
+      "parameters": {
+        "url": "https://SEU-TENANT.sharepoint.com/sites/SEU-SITE/_api/web/lists(guid'<<PREENCHER>>')/items?$select=Id,Title,Respons_x00e1_vel/Title,Respons_x00e1_vel/EMail,AttachmentFiles&$expand=Respons_x00e1_vel,AttachmentFiles&$top=500",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftSharePointOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json;odata=nometadata"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "microsoftSharePointOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftSharePointOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "7e9ddca0-e8e7-487e-b93b-97d95a9b37ee",
+      "name": "Tem Kit de Boas-Vindas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -4884,
+        -776
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "90311bbc-0e6f-4608-ab36-50edef7176ac",
+              "leftValue": "={{ $('Destinatários - Comercial').item.json.kitCaminho }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "f7b82e0e-fe4a-4325-93a1-dcd9d16603f2",
+      "name": "Baixar Kit de Boas-Vindas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        -4664,
+        -896
+      ],
+      "parameters": {
+        "url": "={{ 'https://SEU-TENANT.sharepoint.com/sites/SEU-SITE/_api/web/GetFileByServerRelativePath(decodedurl=@a)/$value?@a=' + encodeURIComponent(\"'\" + String($('Destinatários - Comercial').item.json.kitCaminho).replace(/'/g, \"''\") + \"'\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftSharePointOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "microsoftSharePointOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftSharePointOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "e3b2cd48-9fa5-439f-953f-1544d1e813ab",
+      "name": "Enviar Kit de Boas-Vindas (PDF)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4444,
+        -896
+      ],
+      "parameters": {
+        "jsCode": "// Envia o PDF do Kit de Boas-Vindas (anexo do bolsão na Matriz Bolsões) direto ao WAHA.\n// O arquivo não fica salvo nos dados da execução, só o resultado do envio.\nconst WAHA = 'http://127.0.0.1:3000';\nconst SESSAO = 'automacao_encerramento_and_adesao';\n// Mensagem pronta para o Comercial encaminhar ao cliente junto com o PDF\n// (mesmo texto do e-mail \"Guia de Segurança ASTER\"; só muda o nome do bolsão).\nconst legenda = bolsao => 'Prezados clientes,\\n\\n' +\n  'Preparamos um *guia com os protocolos e orientações* do projeto de segurança do *Bolsão ' + String(bolsao || '').trim() + '*. ' +\n  'Esse material será disponibilizado a todos os novos aderentes.\\n\\n' +\n  'Atenciosamente,\\n\\n*ASTER*\\nFazendo por você, zelando pelo coletivo.';\nconst saida = [];\nconst itens = $input.all();\nfor (let i = 0; i < itens.length; i++) {\n  const dest = $('Destinatários - Comercial').itemMatching(i).json;\n  const chatId = ($('Validar Número - Comercial').itemMatching(i).json || {}).chatId || dest.chatId;\n  let ok = false, erro = null;\n  try {\n    if (!itens[i].binary || !itens[i].binary.data) throw new Error('PDF não baixado do SharePoint');\n    const buf = await this.helpers.getBinaryDataBuffer(i, 'data');\n    await this.helpers.httpRequest({\n      method: 'POST', url: WAHA + '/api/sendFile', json: true, timeout: 300000,\n      body: {\n        session: SESSAO, chatId,\n        file: { mimetype: 'application/pdf', filename: dest.kitNome || 'Kit de Boas-Vindas.pdf', data: buf.toString('base64') },\n        caption: legenda(dest.bolsaoMatriz || dest.cliente),\n      },\n    });\n    ok = true;\n  } catch (e) {\n    erro = String(e.message || e).slice(0, 300);\n    try {\n      await this.helpers.httpRequest({\n        method: 'POST', url: WAHA + '/api/sendText', json: true,\n        body: { session: SESSAO, chatId, text: '⚠️ Não foi possível anexar o PDF do Kit de Boas-Vindas (' + (dest.kitNome || '') + '). Ele está anexado no bolsão, na lista Matriz Bolsões.' },\n      });\n    } catch (e2) {}\n  }\n  saida.push({ json: { chatId, kitEnviado: ok, kitNome: dest.kitNome, erro }, pairedItem: { item: i } });\n}\nreturn saida;\n"
+      }
+    }
+  ],
+  "connections": {
+    "Buscar Cliente no Lists": {
+      "main": [
+        [
+          {
+            "node": "Pode iniciar Comercial e Operacional?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Buscar Cliente no Lists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pode iniciar Comercial e Operacional?": {
+      "main": [
+        [
+          {
+            "node": "Redis INCR - Trava Comercial e Operacional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comercial e Operacional já iniciados?": {
+      "main": [
+        [
+          {
+            "node": "Já acionados - Encerrar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Redis SET - Registro do Início",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Mensagem Comercial": {
+      "main": [
+        [
+          {
+            "node": "Buscar Matriz Bolsões - Comercial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Mensagem Operacional": {
+      "main": [
+        [
+          {
+            "node": "Destinatários - Operacional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Enquete Comercial - Kit Boas-Vindas": {
+      "main": [
+        [
+          {
+            "node": "Redis SET - Comercial Kit Boas-Vindas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Enquete Operacional - Contato Cliente": {
+      "main": [
+        [
+          {
+            "node": "Redis SET - Operacional Contato Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis INCR - Trava Comercial e Operacional": {
+      "main": [
+        [
+          {
+            "node": "Comercial e Operacional já iniciados?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis SET - Registro do Início": {
+      "main": [
+        [
+          {
+            "node": "Preparar Mensagem Comercial",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Preparar Mensagem Operacional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detalhes - Enviar Enquete Comercial - Kit Boas-Vindas": {
+      "main": [
+        [
+          {
+            "node": "Tem Kit de Boas-Vindas?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detalhes - Enviar Enquete Operacional - Contato Cliente": {
+      "main": [
+        [
+          {
+            "node": "Enviar Enquete Operacional - Contato Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Destinatários - Comercial": {
+      "main": [
+        [
+          {
+            "node": "Validar Número - Comercial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Destinatários - Operacional": {
+      "main": [
+        [
+          {
+            "node": "Validar Número - Operacional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Número - Comercial": {
+      "main": [
+        [
+          {
+            "node": "Detalhes - Enviar Enquete Comercial - Kit Boas-Vindas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Número - Operacional": {
+      "main": [
+        [
+          {
+            "node": "Detalhes - Enviar Enquete Operacional - Contato Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Matriz Bolsões - Comercial": {
+      "main": [
+        [
+          {
+            "node": "Destinatários - Comercial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem Kit de Boas-Vindas?": {
+      "main": [
+        [
+          {
+            "node": "Baixar Kit de Boas-Vindas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar Enquete Comercial - Kit Boas-Vindas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baixar Kit de Boas-Vindas": {
+      "main": [
+        [
+          {
+            "node": "Enviar Kit de Boas-Vindas (PDF)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Kit de Boas-Vindas (PDF)": {
+      "main": [
+        [
+          {
+            "node": "Enviar Enquete Comercial - Kit Boas-Vindas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "meta": null,
+  "tags": []
+}

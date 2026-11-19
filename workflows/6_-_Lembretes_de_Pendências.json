@@ -1,0 +1,342 @@
+{
+  "name": "6 - Lembretes de Pendências",
+  "description": null,
+  "active": false,
+  "versionCounter": 139,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "31a0c435-1524-433c-add0-2fcc3bb4ee15",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -144,
+        -2176
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "8bca269f-0b45-4e01-bb0e-cb842b3e1778",
+      "name": "Buscar Inclusões em Andamento",
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        80,
+        -2176
+      ],
+      "parameters": {
+        "resource": "item",
+        "site": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Gestão Operacional",
+          "cachedResultUrl": ""
+        },
+        "list": {
+          "__rl": true,
+          "value": "<<PREENCHER>>",
+          "mode": "list",
+          "cachedResultName": "Adesão de Clientes"
+        },
+        "filter": "fields/StatusAutomacao eq 'Aguardando Financeiro e Cadastros' or fields/StatusAutomacao eq 'Aguardando Comercial e Operacional'",
+        "returnAll": true,
+        "options": {
+          "fields": [
+            "fields"
+          ]
+        },
+        "simplify": false
+      },
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftOAuth2Api>>"
+        }
+      }
+    },
+    {
+      "id": "9ecd86d9-c68a-430c-a374-4ec8ba2a2cc1",
+      "name": "Montar Lembretes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        -2176
+      ],
+      "parameters": {
+        "jsCode": "// Cabeçalho padrão das mensagens do Comercial e do Operacional:\n// Bolsão + cada cliente com nome, endereço, telefone e e-mail (coluna \"Cliente\" do Lists)\n// Coluna \"Cliente\" = só o nome; Telefone, Email, Rua e Numero ficam em colunas próprias (uma linha por cliente).\n// Itens antigos: \"Nome, Rua e número, e-mail, Tel: ...\" na própria coluna Cliente.\nconst linhasCliente = f => {\n  const col = v => String(v || '').split('\\n').map(s => s.trim());\n  const nomes = col(f.Cliente || f.Bolsao).filter(Boolean);\n  if (!(f.Telefone || f.Email || f.Rua || f.Numero)) return nomes;\n  return nomes.map((nome, i) => {\n    const partes = [nome.replace(/,/g, ' '), [col(f.Rua)[i], col(f.Numero)[i]].filter(Boolean).join(' ').replace(/,/g, ' '), col(f.Email)[i]].filter(Boolean);\n    if (col(f.Telefone)[i]) partes.push('Tel: ' + col(f.Telefone)[i]);\n    return partes.join(', ');\n  });\n};\nconst cabecalhoCliente = f => {\n  const linhas = linhasCliente(f);\n  const blocos = linhas.map(l => {\n    const partes = l.split(',').map(s => s.trim()).filter(Boolean);\n    const nome = (partes.shift() || '').split(' — ')[0].trim();\n    const email = (l.match(/[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+/) || [])[0];\n    const tel = (l.match(/Tel\\.?:\\s*([^,]+)/i) || [])[1];\n    const endereco = partes.filter(s => !s.includes('@') && !/^Tel\\.?:/i.test(s)).join(', ');\n    return `👤 *Cliente:* ${nome || 'Não informado'}\\n📍 *Endereço:* ${endereco || 'Não informado'}\\n📞 *Telefone:* ${tel ? tel.trim() : 'Não informado'}\\n📧 *E-mail:* ${email || 'Não informado'}`;\n  });\n  if (!blocos.length) blocos.push('👤 *Cliente:* Não informado\\n📍 *Endereço:* Não informado\\n📞 *Telefone:* Não informado\\n📧 *E-mail:* Não informado');\n  return `🏘️ *Bolsão:* ${f.Title || 'Não informado'}\\n\\n` + blocos.join('\\n\\n');\n};\n\n// Monta um lembrete para cada etapa ainda não confirmada como realizada\nconst P = {\n  fin: 'inclusao:financeiro:poll:',\n  cad: 'inclusao:cadastros:poll:',\n  com: 'inclusao:comercial:poll:',\n  ope: 'inclusao:operacional:poll:'\n};\n\nconst ETAPAS = {\n  finCadastro:  { area: 'FINANCEIRO', prefixo: P.fin, etapa: 'Cadastro Financeiro',\n                  acao: 'Realizar os cadastros financeiros do novo cliente.',\n                  opcoes: ['✅ Cadastro realizado', '⚠️ Pendente'] },\n  finFormEnvio: { area: 'FINANCEIRO', prefixo: P.fin, etapa: 'Formulario Financeiro',\n                  acao: 'Enviar o formulário de cadastro ao cliente.',\n                  opcoes: ['✅ Formulário enviado', '⚠️ Pendente'] },\n  finFormRetorno: { area: 'FINANCEIRO', prefixo: P.fin, etapa: 'Retorno Formulario Financeiro',\n                  acao: 'Confirmar o recebimento do formulário preenchido pelo cliente.',\n                  opcoes: ['✅ Formulário recebido', '⚠️ Pendente'] },\n  cadastros:    { area: 'CADASTROS', prefixo: P.cad, etapa: 'Cadastros',\n                  acao: 'Cadastrar no FINDME, MONUV e SIGMA.',\n                  opcoes: ['✅ Cadastros concluídos', '⚠️ Pendente'] },\n  comKit:       { area: 'COMERCIAL', prefixo: P.com, etapa: 'Kit Boas-Vindas Comercial',\n                  acao: 'Enviar o Kit de Boas-Vindas ao cliente.',\n                  opcoes: ['✅ Kit de Boas-Vindas enviado', '⚠️ Pendente'] },\n  comGrupo:     { area: 'COMERCIAL', prefixo: P.com, etapa: 'Inclusao Grupo Comercial',\n                  acao: 'Incluir o cliente no grupo de comunicação.',\n                  opcoes: ['✅ Inclusão no grupo realizada', '⚠️ Pendente'] },\n  opeContato:   { area: 'OPERACIONAL', prefixo: P.ope, etapa: 'Contato Cliente Operacional',\n                  acao: 'Entrar em contato com o novo cliente.',\n                  opcoes: ['✅ Contato realizado', '⚠️ Pendente'] },\n  opePlaca:     { area: 'OPERACIONAL', prefixo: P.ope, etapa: 'Instalacao Placa Operacional',\n                  acao: 'Realizar a instalação da placa de identificação ASTER no cliente.',\n                  opcoes: ['✅ Placa instalada', '⚠️ Pendente'] },\n  opeEquipe:    { area: 'OPERACIONAL', prefixo: P.ope, etapa: 'Orientacao Equipe Operacional',\n                  acao: 'Orientar a equipe operacional sobre a entrada do novo cliente.',\n                  opcoes: ['✅ Equipe orientada', '⚠️ Pendente'] }\n};\n\nconst etapaFinanceiro = s => ({\n  'Aguardando Cadastro': 'finCadastro',\n  'Cadastro Realizado': 'finFormEnvio',\n  'Formulario Enviado': 'finFormRetorno', 'Aguardando Formulario': 'finFormRetorno',\n  'Formulario Recebido': 'finFormRetorno'\n}[s] || null);\n\nconst etapaComercial = s =>\n  ({ 'Aguardando Comercial': 'comKit', 'Kit de Boas-Vindas Enviado': 'comGrupo', 'Aguardando Inclusao no Grupo': 'comGrupo' }[s] || null);\n\nconst etapaOperacional = s =>\n  ({ 'Aguardando Operacional': 'opeContato', 'Contato com Cliente Realizado': 'opePlaca', 'Placa Instalada': 'opeEquipe' }[s] || null);\n\nconst saida = [];\n\nfor (const item of $input.all()) {\n  const f = item.json.fields || {};\n  if (!item.json.id) continue;\n  const cliente = f.Title || 'Não informado';\n  const chaves = [];\n\n  if (f.StatusAutomacao === 'Aguardando Financeiro e Cadastros') {\n    // Financeiro: notificado por e-mail (WF 2), com reenvio automático\n    if (f.CadastrosStatus !== 'Concluido') chaves.push('cadastros');\n  }\n\n  if (f.StatusAutomacao === 'Aguardando Comercial e Operacional') {\n    chaves.push(etapaComercial(f.ComercialStatus));\n    chaves.push(etapaOperacional(f.OperacionalStatus));\n  }\n\n  for (const k of chaves.filter(Boolean)) {\n    const e = ETAPAS[k];\n    saida.push({\n      json: {\n        itemId: item.json.id,\n        cliente,\n        prefixo: e.prefixo,\n        etapa: e.etapa,\n        opcoes: e.opcoes,\n        mensagem: `🔔 *LEMBRETE – ${e.area}*\\n\\n${['CADASTROS', 'COMERCIAL', 'OPERACIONAL'].includes(e.area) ? cabecalhoCliente(f) : `🏢 *Cliente:* ${cliente}`}\\n\\n📌 *Pendência:*\\n${e.acao}\\n\\nApós concluir, selecione uma opção abaixo.`\n      }\n    });\n  }\n}\n\nreturn saida;"
+      }
+    },
+    {
+      "id": "a7132199-4b17-4613-a924-0ed298c9f838",
+      "name": "Enviar Lembrete",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        1200,
+        -2176
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendPoll",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: ($('Validar Número - Lembretes').item.json.chatId || $('Destinatários - Lembretes').item.json.chatId),\n  poll: {\n    name: (() => { const m = String($('Montar Lembretes').item.json.mensagem); const b = (m.match(/Bols\\u00e3o:\\*\\s*([^\\n]+)/) || [])[1]; const t = (m.split('\\n')[0] || '').trim(); const i = m.lastIndexOf('\\u{1F4CC}'); const a = (i >= 0 ? m.slice(i) : '').split('\\n\\nApós')[0].replace(/\\*/g, '').trim(); return (a || t).slice(0, 250); })(),\n    options: $('Montar Lembretes').item.json.opcoes,\n    multipleAnswers: false\n  }\n}\n}}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 2000
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "a71e1e27-0d91-4e9d-80b7-83d5b535c19f",
+      "name": "Registrar Enquete do Lembrete",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        1424,
+        -2176
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $('Montar Lembretes').item.json.prefixo + $json._data.Info.ID }}",
+        "value": "={{ JSON.stringify({ itemId: $('Montar Lembretes').item.json.itemId, cliente: $('Montar Lembretes').item.json.cliente, etapa: $('Montar Lembretes').item.json.etapa }) }}",
+        "expire": true,
+        "ttl": 7776000
+      },
+      "credentials": {
+        "redis": {
+          "name": "<<CRIAR CREDENCIAL redis>>"
+        }
+      }
+    },
+    {
+      "id": "4b75d365-3445-4ea8-9899-741274070a61",
+      "name": "Detalhes - Enviar Lembrete",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "position": [
+        976,
+        -2176
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:3000/api/sendText",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: ($('Validar Número - Lembretes').item.json.chatId || $('Destinatários - Lembretes').item.json.chatId),\n  text: (() => { const m = String($('Montar Lembretes').item.json.mensagem); const i = m.lastIndexOf('\\u{1F4CC}'); return (i >= 0 ? m.slice(0, i) : m).trim(); })()\n}\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "3c436c53-ca41-4c78-bf82-e2260e84d907",
+      "name": "Destinatários - Lembretes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        -2176
+      ],
+      "parameters": {
+        "jsCode": "// ===== Representante comercial do bolsão =====\n// O responsável de cada bolsão vem da coluna \"Responsável\" da lista \"Matriz Bolsões\" (SharePoint).\n// Aqui fica só o WhatsApp de cada responsável, pelo e-mail dele (formato 55 + DDD + número).\nconst REPRESENTANTES = {\n  'exemplo4@exemplo.com':  '5511999999999',   // Responsável A\n  'exemplo5@exemplo.com': '5511999999999',   // Responsável B\n};\n// Recebe sempre. Também é o único destino quando o bolsão não é encontrado na Matriz.\nconst SEMPRE = [\n  '5511999999999',          // Responsável pela automação\n];\n// EM TESTE: true = cada representante é trocado pelo número de teste abaixo.\n// Para colocar em produção, troque para false.\nconst MODO_TESTE = true;\nconst NUMEROS_TESTE = {\n  'exemplo4@exemplo.com':  '5511999999999',   // bolsões do Responsável A → Responsável pela automação\n  // 5511999999999 é o próprio WhatsApp da automação: mensagem para ele mesmo não chega\n  'exemplo5@exemplo.com': '5511999999999',   // bolsões da Ana → Responsável pela automação\n};\n\nconst norm = s => ' ' + String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()\n  .replace(/[^a-z0-9]+/g, ' ')\n  .replace(/\\b(rua|r|av|avenida|alameda|al|praca|travessa|estrada|bolsao)\\b/g, ' ')\n  .replace(/\\s+/g, ' ').trim() + ' ';\n\n// Procura o bolsão da inclusão na Matriz (ignora acentos, maiúsculas e \"Rua\", \"Av.\" etc.)\nconst acharBolsao = (textos, matriz) => {\n  for (const t of textos) {\n    const alvo = norm(t);\n    if (alvo.trim().length < 3) continue;\n    const achados = (matriz || []).filter(b => {\n      const n = norm(b.Title);\n      return n.trim().length >= 3 && (alvo.includes(n) || n.includes(alvo));\n    });\n    if (achados.length) return achados.sort((a, b) => norm(b.Title).length - norm(a.Title).length)[0];\n  }\n  return null;\n};\n\nconst representante = (textos, resposta) => {\n  const lista = resposta && Array.isArray(resposta.value) ? resposta.value : null;\n  const b = lista ? acharBolsao(textos, lista) : null;\n  const resp = (b && b.Respons_x00e1_vel) || {};\n  const email = String(resp.EMail || '').toLowerCase();\n  const tel = MODO_TESTE ? NUMEROS_TESTE[email] : REPRESENTANTES[email];\n  const anexos = (b && b.AttachmentFiles) || [];\n  const kit = anexos.find(a => /\\.pdf$/i.test(a.FileName)) || anexos[0] || null;\n  let aviso = '';\n  if (!lista) aviso = 'Não foi possível consultar a Matriz Bolsões. Mensagem enviada só para o responsável pela automação.';\n  else if (!b) aviso = 'Bolsão não encontrado na Matriz Bolsões. Mensagem enviada só para o responsável pela automação.';\n  else if (!tel) aviso = `Responsável \"${resp.Title || 'não preenchido'}\" do bolsão ${b.Title} sem WhatsApp cadastrado na automação.`;\n  if (MODO_TESTE && tel) aviso = `MODO TESTE – em produção esta mensagem iria para ${resp.Title} (${REPRESENTANTES[email] || 'sem número'}).`;\n  return {\n    bolsaoMatriz: b ? b.Title : null,\n    representante: tel ? (resp.Title || null) : null,\n    // em teste vai só para o número de teste do representante; em produção, representante + SEMPRE\n    numeros: MODO_TESTE ? (tel ? [tel] : SEMPRE) : (tel ? [tel] : []).concat(SEMPRE),\n    aviso,\n    kitNome: kit ? kit.FileName : null,\n    kitCaminho: kit ? kit.ServerRelativeUrl : null,\n  };\n};\n\nconst valido = n => String(n).replace(/\\D/g, '');\nconst lista = arr => [...new Set(arr.map(valido).filter(n => n.length >= 12 && n.length <= 13))].map(n => n + '@c.us');\n\n// Quem recebe os lembretes de cada área. Comercial: representante do bolsão (Matriz Bolsões).\nconst NUMEROS = {\n  'inclusao:cadastros:poll:': [\n    '5511999999999',          // Responsável pela automação\n    // 'DDD+NÚMERO',            // responsável do Cadastros\n  ],\n  'inclusao:operacional:poll:': [\n    '5511999999999',          // Responsável pela automação\n    // '5511999999999',       // Diretor Operacional – desativado durante os testes\n  ],\n};\n\nconst saida = [];\n$input.all().forEach((item, i) => {\n  const orig = $('Montar Lembretes').itemMatching(i).json;\n  const numeros = orig.prefixo === 'inclusao:comercial:poll:'\n    ? representante([orig.cliente], item.json).numeros\n    : (NUMEROS[orig.prefixo] || SEMPRE);\n  lista(numeros).forEach(chatId => saida.push({ json: { ...orig, chatId }, pairedItem: { item: i } }));\n});\nreturn saida;\n"
+      }
+    },
+    {
+      "id": "4ac7dad7-3fac-4ccb-89ac-aaffcc193f13",
+      "name": "Validar Número - Lembretes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        752,
+        -2176
+      ],
+      "parameters": {
+        "url": "http://127.0.0.1:3000/api/contacts/check-exists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $json.chatId.replace('@c.us', '') }}"
+            },
+            {
+              "name": "session",
+              "value": "<<PREENCHER>>"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "027cd1b9-3dcb-42e9-b7ec-ab1b6c8ddb26",
+      "name": "Buscar Matriz Bolsões",
+      "notes": "Lista 'Matriz Bolsões' (Gestão Operacional): responsável e Kit de Boas-Vindas de cada bolsão.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "position": [
+        416,
+        -2356
+      ],
+      "parameters": {
+        "url": "https://SEU-TENANT.sharepoint.com/sites/SEU-SITE/_api/web/lists(guid'<<PREENCHER>>')/items?$select=Id,Title,Respons_x00e1_vel/Title,Respons_x00e1_vel/EMail,AttachmentFiles&$expand=Respons_x00e1_vel,AttachmentFiles&$top=500",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftSharePointOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json;odata=nometadata"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "microsoftSharePointOAuth2Api": {
+          "name": "<<CRIAR CREDENCIAL microsoftSharePointOAuth2Api>>"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Buscar Inclusões em Andamento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Inclusões em Andamento": {
+      "main": [
+        [
+          {
+            "node": "Montar Lembretes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Lembretes": {
+      "main": [
+        [
+          {
+            "node": "Buscar Matriz Bolsões",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Lembrete": {
+      "main": [
+        [
+          {
+            "node": "Registrar Enquete do Lembrete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detalhes - Enviar Lembrete": {
+      "main": [
+        [
+          {
+            "node": "Enviar Lembrete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Destinatários - Lembretes": {
+      "main": [
+        [
+          {
+            "node": "Validar Número - Lembretes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Número - Lembretes": {
+      "main": [
+        [
+          {
+            "node": "Detalhes - Enviar Lembrete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Matriz Bolsões": {
+      "main": [
+        [
+          {
+            "node": "Destinatários - Lembretes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}
