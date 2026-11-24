@@ -2,7 +2,7 @@
   "name": "10 - Sincronizar Alterações do Lists",
   "description": null,
   "active": false,
-  "versionCounter": 50,
+  "versionCounter": 51,
   "sourceWorkflowId": null,
   "nodes": [
     {
@@ -99,6 +99,9 @@
       "name": "Detectar Alterações Manuais",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
       "position": [
         3040,
         -432
@@ -137,6 +140,9 @@
       "name": "Listar Ações",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
       "position": [
         3488,
         -32
@@ -398,6 +404,9 @@
       "name": "Localizar enquetes desta etapa",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
       "position": [
         4384,
         -656
@@ -468,6 +477,9 @@
       "name": "Seguir uma vez",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
       "position": [
         5056,
         -720
@@ -481,6 +493,9 @@
       "name": "Listar Alterações Fora da Hora",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
       "position": [
         3488,
         -848
@@ -494,6 +509,9 @@
       "name": "Preparar Campo a Desfazer",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
       "position": [
         3712,
         -848
@@ -830,6 +848,9 @@
       "name": "Preparar Conclusão da Régua",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
       "position": [
         2816,
         -624

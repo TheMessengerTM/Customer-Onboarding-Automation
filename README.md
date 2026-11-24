@@ -76,7 +76,7 @@ Enviar o Kit de Boas-Vindas ao cliente.
 - **Redis liga a enquete ao cliente e trava cliques duplos:** cada enquete enviada guarda o ID da mensagem no Redis apontando para o item do Lists. Um contador (`INCR`) garante que um clique repetido não execute a etapa duas vezes.
 - **Cada bolsão tem o seu responsável:** a lista **Matriz Bolsões** diz quem é o responsável comercial de cada bolsão e guarda o PDF do kit de boas-vindas como anexo.
 - **Modo teste:** os nós que escolhem destinatários têm uma chave `MODO_TESTE`. Ligada, todas as mensagens vão para um número de teste e cada uma diz para quem iria em produção.
-- **Falhas de rede não param o processo:** os nós que acessam SharePoint, WhatsApp, Outlook, Redis e OpenAI tentam de novo até 5 vezes, com 5 s entre as tentativas. As travas `INCR` ficam de fora de propósito, porque repetir um `INCR` faria a trava contar duas vezes. Se a falha persistir, o fluxo 9 avisa no WhatsApp.
+- **Falhas de rede não param o processo:** os nós que acessam SharePoint, WhatsApp, Outlook, Redis e OpenAI tentam de novo até 5 vezes, com 5 s entre as tentativas. As travas `INCR` ficam de fora de propósito, porque repetir um `INCR` faria a trava contar duas vezes. No fluxo 10, que roda a cada 10 s, os nós de código também tentam de novo (3 vezes, com 2 s entre elas), porque uma queda momentânea do *task runner* do n8n derruba qualquer nó de código. Esses nós só calculam, então repetir é seguro. Se a falha persistir, o fluxo 9 avisa no WhatsApp.
 
 ## Como usar
 

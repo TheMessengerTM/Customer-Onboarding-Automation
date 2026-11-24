@@ -2,7 +2,7 @@
   "name": "9 - Tratamento de Erros",
   "description": null,
   "active": false,
-  "versionCounter": 6,
+  "versionCounter": 7,
   "sourceWorkflowId": null,
   "nodes": [
     {
@@ -33,7 +33,7 @@
         "url": "http://127.0.0.1:3000/api/sendText",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: \"<<PREENCHER>>\",\n  text: \"🚨 *ERRO NA AUTOMAÇÃO\" + (/encerramento|recupera|justificativa|controle de prazos|operacional e sistemas|webhook de (mensagem do comercial|resposta do operacional)/i.test($json.workflow?.name || '') ? \" DE ENCERRAMENTO\" : \" DE INCLUSÃO\") + \"*\\n\\n\" +\n    \"⚙️ *Workflow:* \" + ($json.workflow?.name || '-') +\n    \"\\n🧩 *Nó:* \" + ($json.execution?.lastNodeExecuted || '-') +\n    \"\\n❗ *Erro:* \" + ($json.execution?.error?.message || '-') +\n    \"\\n🔗 \" + ($json.execution?.url || '').replace(/^https?:\\/\\/[^/]+/, 'http://127.0.0.1:5678')\n}\n}}",
+        "jsonBody": "={{\n{\n  session: \"automacao_encerramento_and_adesao\",\n  chatId: \"<<PREENCHER>>\",\n  text: \"🚨 *ERRO NA AUTOMAÇÃO\" + ([/* IDs dos fluxos do Encerramento */ \"<<PREENCHER>>\"].includes($json.workflow?.id) || /encerramento|recupera|justificativa|controle de prazos|operacional e sistemas|webhook de (mensagem do comercial|resposta do operacional)/i.test($json.workflow?.name || '') ? \" DE ENCERRAMENTO\" : \" DE INCLUSÃO\") + \"*\\n\\n\" +\n    \"⚙️ *Workflow:* \" + ($json.workflow?.name || '-') +\n    \"\\n🧩 *Nó:* \" + ($json.execution?.lastNodeExecuted || '-') +\n    \"\\n❗ *Erro:* \" + ($json.execution?.error?.message || '-') +\n    \"\\n🔗 \" + ($json.execution?.url || '').replace(/^https?:\\/\\/[^/]+/, 'http://127.0.0.1:5678')\n}\n}}",
         "options": {}
       }
     }
